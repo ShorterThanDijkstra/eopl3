@@ -6,8 +6,7 @@
     (cond [(symbol? expr) (eqv? var expr)]
           [(eqv? (car expr) 'lambda)
            (let [(var_ (caadr expr))
-                 (expr_ (caddr expr))
-                 ]
+                 (expr_ (caddr expr))]
              (and (not (eqv? var_ var))
                   (occurs-free? var expr_)))]
           [else (let [(expr_ (car expr))
@@ -22,15 +21,16 @@
 ;;; (check-equal? (occurs-free? 'x '(lambda (y) (x y))) #t)
 ;;; (check-equal? (occurs-free? 'x '((lambda (x) x) (x y))) #t)
 ;;; (check-equal? (occurs-free? 'x '(lambda (y) (lambda (z) (x (y z))))) #t)
+
 (let [(exprs '('x
-             'y
-             '(lambda (x) (x y))
-             '(lambda (y) (x y))
-             '((lambda (x) x) (x y))
-             '(lambda (y) (lambda (z) (x (y z))))))
+               'y
+               '(lambda (x) (x y))
+               '(lambda (y) (x y))
+               '((lambda (x) x) (x y))
+               '(lambda (y) (lambda (z) (x (y z))))))
       (answers '(#t #f #f #t #t #t))
       (test (lambda (expr answer) (check-equal? (occurs-free? 'x expr) answer)))]
-  (map test exprs answers)) 
+  (map test exprs answers))
 
 
 
