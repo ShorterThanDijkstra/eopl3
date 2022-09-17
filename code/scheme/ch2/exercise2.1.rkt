@@ -85,8 +85,6 @@
         [(= (bigits->natural-number bigit) index)
          (check-predecessor (predecessor bigit) (- index 1))]
         [else #f]))
-
-
 (check-equal? (check-predecessor (natural-number->bigits MAX) MAX) #t)
 
 (check-equal? (factorial (natural-number->bigits 10)) (natural-number->bigits 3628800))
