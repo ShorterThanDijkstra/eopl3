@@ -8,7 +8,6 @@
   (define (traverse bin-tree count)
     (cond [(leaf? bin-tree) count]
           [(eqv? (contents-of bin-tree) 'red)
-
            (interior-node (contents-of bin-tree)
                           (traverse (lson bin-tree) (+ count 1))
                           (traverse (rson bin-tree) (+ count 1)))]
