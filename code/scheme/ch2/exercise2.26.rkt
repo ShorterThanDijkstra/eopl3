@@ -1,72 +1,51 @@
 #lang eopl
 (require rackunit)
 
+(define-datatype Red-blue-tree red-blue-tree?
+  [A-red-blue-subtree])
 
-(define-datatype Bintree bintree?
-  [Leaf-node
-   (num integer?)]
-  [Interior-node
-   (key symbol?)
-   (left bintree?)
-   (right bintree?)])
+(define-datatype Red-blue-subtree red-blue-subtree?
+  [Red-node
+   (lson red-blue-subtree?)
+   (rson red-blue-subtree?)]
+  [Blue-node (red-blue-subtrees (list-of red-blue-subtree?))]
+  [Leaf-node (val integer?)])
 
-(define (max-interior-help bintree)
-  (cases Bintree bintree
-    [Leaf-node (num) (list '() num)]
-    [Interior-node
-     (key left right)
-     (let ([max-and-sum-left (max-interior-help left)]
-           [max-and-sum-right (max-interior-help right)])
-       (let ([max-left (car max-and-sum-left)]
-             [max-right (car max-and-sum-right)]
-             [sum-left (cadr max-and-sum-left)]
-             [sum-right (cadr max-and-sum-right)])
-         (let ([sum (+ sum-left sum-right)])
-           (cond [(and (null? max-left) (null? max-right))
-                  (list key sum)]
-                 [(null? max-left)
-                  (if (< sum sum-right)
-                      (list max-right sum)
-                      (list key sum))]
-                 [(null? max-right)
-                  (if (< sum sum-left)
-                      (list max-left sum)
-                      (list key sum))]
-                 [(and (> sum sum-left)
-                       (> sum sum-right))
-                  (list key sum)]
-                 [(and (> sum-left sum)
-                       (> sum-left sum-right))
-                  (list max-right sum)]
-                 [(and (> sum-right sum)
-                       (> sum-right sum-left))
-                  (list max-right sum)]
-                 [else (eopl:error "error")]))))]))
+(define (count-red rbstree count)
+  (cases Red-blue-subtree rbstree
+    [Red-node (lson rson) (Red-node (count-red lson (+ count 1)) (count-red rson (+ count 1)))]
+    [Blue-node (children) (Blue-node (map (lambda (child) (count-red child count)) children))]
+    [Leaf-node (_) (Leaf-node count)]))
 
-(define (max-interior bintree)
-  (car (max-interior-help bintree)))
+(define (mark-leaves-with-red-depth red-blue-tree)
+  (count-red red-blue-tree 0))
 
 
 ;;; test
+(define test-case
+  (Red-node
+   (Blue-node
+    (list
+     (Leaf-node 26)
+     (Leaf-node 12)))
+   (Red-node
+    (Leaf-node 11)
+    (Blue-node
+     (list
+      (Leaf-node 117)
+      (Leaf-node 14))))))
 
-(define tree-1
-  (Interior-node 'foo (Leaf-node 2) (Leaf-node 3)))
-(define tree-2
-  (Interior-node 'bar (Leaf-node -1) tree-1))
-(define tree-3
-  (Interior-node 'baz tree-2 (Leaf-node 1)))
+(define answer
+  (Red-node
+   (Blue-node
+    (list
+     (Leaf-node 1)
+     (Leaf-node 1)))
+   (Red-node
+    (Leaf-node 2)
+    (Blue-node
+     (list
+      (Leaf-node 2)
+      (Leaf-node 2))))))
 
-
-(check-equal? (max-interior tree-1) 'foo)
-(check-equal? (max-interior tree-2) 'foo)
-(check-equal? (max-interior tree-3) 'baz)
-
-(define tree-4
-  (Interior-node 'foo (Leaf-node 2) (Leaf-node -4)))
-(define tree-5
-  (Interior-node 'bar (Leaf-node -1) tree-1))
-(define tree-6
-  (Interior-node 'baz tree-2 (Leaf-node 1)))
-
- (check-equal? (max-interior tree-5) 'foo)
- (check-equal? (max-interior tree-6) 'baz)
+(check-equal? (mark-leaves-with-red-depth test-case) answer)
