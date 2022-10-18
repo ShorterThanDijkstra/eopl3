@@ -57,31 +57,6 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Expression data type
-(define identifier?
-  (lambda (exp)
-    (and (symbol? exp)
-         (not (eqv? exp 'lambda)))))
-
-(define-datatype expression expression?
-  (const-exp
-   (num number?))
-  (if-exp
-   (exp1 expression?)
-   (exp2 expression?)
-   (exp3 expression?))
-  (var-exp
-   (var identifier?))
-  (let-exp
-   (var identifier?)
-   (exp1 expression?)
-   (body expression?))
-  (op-exp
-   (op procedure?) ;;; list of ExpVal -> ExpVal
-   (exps (list-of expression?)))
-  )
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
 (define init-env
   (lambda ()
@@ -135,6 +110,13 @@
   (lambda (sym val old-env)
     (extended-env-record sym val old-env)))
 
+(define extend-env-list
+  (lambda (syms vals old-env)
+    (if (null? syms)
+        old-env
+        (extend-env-list (cdr syms) (cdr vals)
+                         (extend-env (car syms) (car vals) old-env)))))
+
 (define apply-env
   (lambda (env search-sym)
     (if (empty-env? env)
@@ -145,6 +127,40 @@
                   (if (eqv? search-sym sym)
                       val
                       (apply-env old-env search-sym))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Expression data type
+(define identifier?
+  (lambda (exp)
+    (and (symbol? exp)
+         (not (eqv? exp 'lambda)))))
+
+(define-datatype expression expression?
+  (const-exp
+   (num number?))
+  (if-exp
+   (exp1 expression?)
+   (exp2 expression?)
+   (exp3 expression?))
+  (var-exp
+   (var identifier?))
+  (let-exp
+   (vars (list-of identifier?))
+   (exps (list-of expression?))
+   (body expression?))
+  (let*-exp
+   (vars (list-of identifier?))
+   (exps (list-of expression?))
+   (body expression?))
+  (op-exp
+   (op procedure?) ;;; list of ExpVal -> ExpVal
+   (exps (list-of expression?)))
+  (unpack-exp
+   (vars (list-of identifier?))
+   (lst expression?)
+   (body expression?))
+  )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Interpreter
@@ -159,13 +175,31 @@
                 (if (expval->bool val1)
                     (value-of exp2 env)
                     (value-of exp3 env))))
-      (let-exp (var exp1 body)
-               (let ((val1 (value-of exp1 env)))
-                 (value-of body
-                           (extend-env var val1 env))))
+      (let-exp (vars exps body)
+               (value-of body
+                         (extend-env-list vars
+                                          (map (lambda (exp) (value-of exp env)) exps) env)))
+      (let*-exp (vars exps body)
+                (let go ([vars_ vars]
+                         [exps_ exps]
+                         [env_ env])
+                  (if (null? vars_)
+                      (value-of body env_)
+                      (go (cdr vars_) (cdr exps_) (extend-env (car vars_) (value-of (car exps_) env_) env_)))))
       (op-exp (op exps)
-              (op (map (lambda (exp) (value-of exp env)) exps))) ;;; list of ExpVal
-      )))
+              (op
+               (map (lambda (exp) (value-of exp env)) exps))) ;;; list of ExpVal
+      (unpack-exp (vars lst body)
+                  (let ([expvals (value-of lst env)])
+                    (let go ([vars_ vars]
+                             [vals_ (expval->scheme-val expvals)]
+                             [env_ env])
+                      (cond [(and (null? vars_) (null? vals_))
+                             (value-of body env_)]
+                            [(or (null? vars_) (null? vals_))
+                             (eopl:error "error")]
+                            [else
+                             (go (cdr vars_) (cdr vals_) (extend-env (car vars_) (scheme-val->expval (car vals_)) env_))])))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; primitive oprations
@@ -209,28 +243,38 @@
            (list-val (map (lambda (ev) (expval->scheme-val ev)) expvals)))
          exps))))
 
+(define emptylist-exp
+  (lambda ()
+    (op-exp
+     (lambda (_)
+       (list-val '()))
+     '())))
+
+(define cons-exp
+  (lambda (first rest)
+    (if (not (and (expression? first) (expression? rest)))
+        (eopl:error "error")
+        (op-exp
+         (lambda (expvals)
+           (let ([scheme-vals (map expval->scheme-val expvals)])
+             (list-val (cons (car scheme-vals ) (cadr scheme-vals )))))
+         (list first rest)))))
+
 ;;; test
-;  minus(- (minus x) 9)
-(define code-ast1 (minus-exp (diff-exp (minus-exp (var-exp 'x)) (const-exp 9))))
-(check-equal? (value-of code-ast1 (init-env)) (num-val 19))
 
-; (- x 1)
-(define code-ast2 (diff-exp (var-exp 'x) (const-exp 1)))
-(check-equal? (value-of code-ast2 (init-env)) (num-val 9))
+(define code1
+  (unpack-exp '(a b)
+              (cons-exp (var-exp 'x)
+                        (cons-exp (const-exp 3)
+                                  (emptylist-exp)))
+              (diff-exp (var-exp 'a) (var-exp 'b))))
 
-; (zero? 0)
-(define code-ast3 (zero?-exp (const-exp 0)))
-(check-equal? (value-of code-ast3 (init-env)) (bool-val #t))
+(check-equal? (value-of code1 (init-env)) (num-val 7))
 
-; (zero? 1)
-(define code-ast4 (zero?-exp (const-exp 1)))
-(check-equal? (value-of code-ast4 (init-env)) (bool-val #f))
-
-; let x = 4
-; in list(x, -(x,1), -(x,3))
-(define code-ast5
-  (let-exp 'x (const-exp 4)
-    (list-exp (list (var-exp 'x)
-                    (diff-exp (var-exp 'x) (const-exp 1))
-                    (diff-exp (var-exp 'x) (const-exp 3))))))
-(check-equal? (value-of code-ast5 (init-env)) (list-val (list 4 3 1)))
+(define code2
+  (unpack-exp '(a b c)
+              (cons-exp (var-exp 'x)
+                        (cons-exp (const-exp 3)
+                                  (emptylist-exp)))
+              (diff-exp (var-exp 'a) (var-exp 'b))))
+; (value-of code2 (init-env))

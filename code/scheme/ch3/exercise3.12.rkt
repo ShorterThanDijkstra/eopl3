@@ -57,31 +57,6 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Expression data type
-(define identifier?
-  (lambda (exp)
-    (and (symbol? exp)
-         (not (eqv? exp 'lambda)))))
-
-(define-datatype expression expression?
-  (const-exp
-   (num number?))
-  (if-exp
-   (exp1 expression?)
-   (exp2 expression?)
-   (exp3 expression?))
-  (var-exp
-   (var identifier?))
-  (let-exp
-   (var identifier?)
-   (exp1 expression?)
-   (body expression?))
-  (op-exp
-   (op procedure?) ;;; list of ExpVal -> ExpVal
-   (exps (list-of expression?)))
-  )
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
 (define init-env
   (lambda ()
@@ -146,6 +121,36 @@
                       val
                       (apply-env old-env search-sym))))))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Expression data type
+(define identifier?
+  (lambda (exp)
+    (and (symbol? exp)
+         (not (eqv? exp 'lambda)))))
+
+(define-datatype expression expression?
+  (const-exp
+   (num number?))
+  (if-exp
+   (exp1 expression?)
+   (exp2 expression?)
+   (exp3 expression?))
+  (var-exp
+   (var identifier?))
+  (let-exp
+   (var identifier?)
+   (exp1 expression?)
+   (body expression?))
+  (op-exp
+   (op procedure?) ;;; list of ExpVal -> ExpVal
+   (exps (list-of expression?)))
+  (cond-exp
+   (conds (list-of (lambda (left&right)
+                     (and (expression? (car left&right))
+                          (expression? (cadr left&right)))))))
+  )
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Interpreter
 ; value-of : Exp × Env → ExpVal
@@ -164,7 +169,20 @@
                  (value-of body
                            (extend-env var val1 env))))
       (op-exp (op exps)
-              (op (map (lambda (exp) (value-of exp env)) exps))) ;;; list of ExpVal
+              (op
+               (map (lambda (exp) (value-of exp env)) exps))) ;;; list of ExpVal
+      (cond-exp (conds)
+                (let find ([conds conds])
+                  (if (null? conds)
+                      (eopl:error "error")
+                      (let* ([first-cond (car conds)]
+                             [cond-left-exp (car first-cond)]
+                             [cond-right-exp (cadr first-cond)]
+                             [cond-left-expval (value-of cond-left-exp env)])
+                        (if (expval->bool cond-left-expval)
+                            (value-of cond-right-exp env)
+                            (find (cdr conds)))))))
+
       )))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -210,27 +228,22 @@
          exps))))
 
 ;;; test
-;  minus(- (minus x) 9)
-(define code-ast1 (minus-exp (diff-exp (minus-exp (var-exp 'x)) (const-exp 9))))
-(check-equal? (value-of code-ast1 (init-env)) (num-val 19))
+(define ast1
+  (cond-exp
+   (list
+    (list (zero?-exp (const-exp 1)) (const-exp 0))
+    (list (zero?-exp (const-exp 1)) (const-exp 1))
+    (list (zero?-exp (const-exp 0)) (const-exp 2))
+    (list (zero?-exp (const-exp 1)) (const-exp 3)))))
 
-; (- x 1)
-(define code-ast2 (diff-exp (var-exp 'x) (const-exp 1)))
-(check-equal? (value-of code-ast2 (init-env)) (num-val 9))
+(check-equal? (value-of ast1 (init-env)) (num-val 2))
 
-; (zero? 0)
-(define code-ast3 (zero?-exp (const-exp 0)))
-(check-equal? (value-of code-ast3 (init-env)) (bool-val #t))
+(define ast2
+  (cond-exp
+   (list
+    (list (zero?-exp (const-exp 1)) (const-exp 0))
+    (list (zero?-exp (const-exp 1)) (const-exp 1))
+    (list (zero?-exp (const-exp 1)) (const-exp 2))
+    (list (zero?-exp (const-exp 1)) (const-exp 3)))))
 
-; (zero? 1)
-(define code-ast4 (zero?-exp (const-exp 1)))
-(check-equal? (value-of code-ast4 (init-env)) (bool-val #f))
-
-; let x = 4
-; in list(x, -(x,1), -(x,3))
-(define code-ast5
-  (let-exp 'x (const-exp 4)
-    (list-exp (list (var-exp 'x)
-                    (diff-exp (var-exp 'x) (const-exp 1))
-                    (diff-exp (var-exp 'x) (const-exp 3))))))
-(check-equal? (value-of code-ast5 (init-env)) (list-val (list 4 3 1)))
+; (value-of ast2 (init-env))
