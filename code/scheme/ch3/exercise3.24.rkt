@@ -30,22 +30,22 @@
 ;;; ExpVal -> scheme value
 
 (define expval->num
-  (lambda (v)
+  (lambda (v debug)
     (cases expval v
       	(num-val (num) num)
-      	(else (eopl:error)))))
+      	(else (eopl:error 'expval->num "~s" debug)))))
 
 (define expval->bool
   (lambda (v)
     (cases expval v
       	(bool-val (bool) bool)
-      	(else (eopl:error)))))
+      	(else (eopl:error 'expval->bool "~s" v)))))
 
 (define expval->proc
   (lambda (v)
     (cases expval v
       	(proc-val (proc) proc)
-      	(else (eopl:error)))))
+      	(else (eopl:error 'expval->proc "~s" v)))))
 
 (define expval->scheme-val
   (lambda (v)
@@ -172,13 +172,13 @@
       (diff-exp (exp1 exp2)
                 (let ((val1 (value-of exp1 env))
                       (val2 (value-of exp2 env)))
-                  (let ((num1 (expval->num val1))
-                        (num2 (expval->num val2)))
+                  (let ((num1 (expval->num val1 'diff-exp))
+                        (num2 (expval->num val2 'diff-exp)))
                     (num-val
                      (- num1 num2)))))
       (zero?-exp (exp1)
                  (let ((val1 (value-of exp1 env)))
-                   (let ((num1 (expval->num val1)))
+                   (let ((num1 (expval->num val1 'zero?-exp)))
                      (if (zero? num1)
                          (bool-val #t)
                          (bool-val #f)))))
@@ -198,64 +198,20 @@
                   (apply-procedure proc arg)))
       )))
 
-; let makemult = proc (maker)
-;                 proc (x)
-;                  if zero?(x)
-;                  then 0
-;                  else -(((maker maker) -(x,1)), -4)
-; in let times4 = proc (x) ((makemult makemult) x)
-;    in (times4 3)
+; let make-odd = proc (even-maker)
+;                  proc (odd-maker)
+;                    proc (x)
+;                      if zero?(x)
+;                      then false
+;                      else (not (((even-maker odd-maker) even-maker) -(x, 1)))
+; in let make-even = proc (old-maker)
+;                      proc (even-maker)
+;                        proc (x)
+;                        if zero?(x)
+;                        then true
+;                        else (not (((odd-maker even-maker) odd-maker) -(x, 1)))
+; in let odd = ((make-odd make-even) make-odd)
+; in let even = ((make-even make-odd) make-even)
 
-; (times 3)
-; ((makemult makemult) 3)
-; (<proc> 3)
-; -(((makemult makemult) 2), -4)
-; -((<proc> 2), 4)
-; -(-(((makemult makemult) 1), -4), 4)
-; -(-((<proc> 1), -4), 4)
-; -(-(-(((maker maker) 0), -4), -4), 4)
-; -(-(-((<proc> 0), -4), -4), 4)
-; -(-(-(0, -4), -4), 4)
-; 12
-
-; let make-mult = proc (maker)
-;                 proc (x)
-;                  proc (y)
-;                   if zero?(y)
-;                   then 0
-;                   else -(((maker maker) -(y,1)), -(0, x))
-; in let times = (make-mult make-mult)
-;    in let make-factorial = proc (maker)
-;                              proc (n)
-;                                if zero?(n)
-;                                   then 1
-;                                   else ((times n) ((maker maker) -(n , 1)))
-;       in let factorial = (make-factorial make-factorial)
-;          in (factorial 10)
-
-(define ast
-  (let-exp 'make-mult
-           (proc-exp 'maker
-                     (proc-exp 'x
-                               (proc-exp 'y
-                                         (if-exp (zero?-exp (var-exp 'y))
-                                                 (const-exp 0)
-                                                 (diff-exp (call-exp (call-exp (var-exp 'maker) (var-exp 'maker))
-                                                                     (diff-exp (var-exp 'y) (const-exp 1)))
-                                                           (diff-exp (const-exp 0)
-                                                                     (var-exp 'x)))))))
-           (let-exp 'times
-                    (call-exp (var-exp 'make-mult) (var-exp 'make-mult))
-                    (let-exp 'make-factorial
-                             (proc-exp 'maker
-                                       (proc-exp 'n
-                                        (if-exp (zero?-exp (var-exp 'n))
-                                                (const-exp 1)
-                                                (call-exp (call-exp (var-exp 'times) (var-exp 'n))
-                                                          (call-exp (call-exp (var-exp 'maker) (var-exp 'maker))
-                                                                    (diff-exp (var-exp 'n)
-                                                                              (const-exp 1)))))))
-                             (let-exp 'factorial
-                                      (call-exp (var-exp 'make-factorial) (var-exp 'make-factorial))
-                                      (call-exp (var-exp 'factorial) (const-exp 10)))))))
-; (check-equal? (value-of ast (init-env)) (num-val 3628800))
+;;; test
+;;; todo
