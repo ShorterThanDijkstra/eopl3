@@ -1,6 +1,31 @@
 #lang eopl
 (require rackunit)
 
+(define the-lexical-spec
+  '((whitespace (whitespace) skip)
+    (comment ("%" (arbno (not #\newline))) skip)
+    (identifier
+     (letter (arbno (or letter digit "_" "-" "?")))
+     symbol)
+    (number (digit (arbno digit)) number)
+    (number ("-" digit (arbno digit)) number)
+    ))
+
+(define the-grammar-spec
+  '(
+    (expression (number) const-exp)
+    (expression (identifier) var-exp)
+    (expression ("-" "(" expression "," expression ")") diff-exp)
+    (expression ("zero?" "(" expression ")") zero?-exp)
+    (expression ("if" expression "then" expression "else" expression) if-exp)
+    (expression ("let" identifier "=" expression "in" expression) let-exp)
+    (expression ("proc" "(" identifier ")" expression) proc-exp)
+    (expression ("(" expression expression ")") call-exp)
+    ))
+
+(define scan&parse
+  (sllgen:make-string-parser the-lexical-spec the-grammar-spec))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Procedure data type
 ; procedure : Var × Exp × Env → Proc
@@ -161,7 +186,13 @@
       'v (num-val 5)
       (extend-env
        'x (num-val 10)
-       (empty-env))))))
+       (extend-env
+        'true
+        (bool-val #t)
+        (extend-env
+         'false
+         (bool-val #f)
+         (empty-env))))))))
 
 ; value-of : Exp × Env → ExpVal
 (define value-of
@@ -198,20 +229,103 @@
                   (apply-procedure proc arg)))
       )))
 
+(define run
+  (lambda (text)
+    (value-of (scan&parse text) (init-env))))
+
 ; let make-odd = proc (even-maker)
 ;                  proc (odd-maker)
 ;                    proc (x)
 ;                      if zero?(x)
 ;                      then false
 ;                      else (not (((even-maker odd-maker) even-maker) -(x, 1)))
-; in let make-even = proc (old-maker)
+; in let make-even = proc (odd-maker)
 ;                      proc (even-maker)
 ;                        proc (x)
 ;                        if zero?(x)
 ;                        then true
 ;                        else (not (((odd-maker even-maker) odd-maker) -(x, 1)))
 ; in let odd = ((make-odd make-even) make-odd)
-; in let even = ((make-even make-odd) make-even)
+;    in let even = ((make-even make-odd) make-even)
+;       in ...
 
 ;;; test
-;;; todo
+(define code1
+  "
+let make-odd = proc (even-maker)
+                 proc (odd-maker)
+                   proc (x)
+                     if zero?(x)
+                     then false
+                     else (((even-maker odd-maker) even-maker) -(x, 1))
+in let make-even = proc (odd-maker)
+                     proc (even-maker)
+                       proc (x)
+                       if zero?(x)
+                       then true
+                       else (((odd-maker even-maker) odd-maker) -(x, 1))
+   in let even = ((make-even make-odd) make-even)
+      in (even 114)
+"
+  )
+(check-equal? (run code1) (bool-val #t))
+
+(define code2
+  "
+let make-odd = proc (even-maker)
+                 proc (odd-maker)
+                   proc (x)
+                     if zero?(x)
+                     then false
+                     else (((even-maker odd-maker) even-maker) -(x, 1))
+in let make-even = proc (odd-maker)
+                     proc (even-maker)
+                       proc (x)
+                       if zero?(x)
+                       then true
+                       else (((odd-maker even-maker) odd-maker) -(x, 1))
+   in let even = ((make-even make-odd) make-even)
+      in (even 1145)
+"
+  )
+(check-equal? (run code2) (bool-val #f))
+
+(define code3
+  "
+let make-odd = proc (even-maker)
+                 proc (odd-maker)
+                   proc (x)
+                     if zero?(x)
+                     then false
+                     else (((even-maker odd-maker) even-maker) -(x, 1))
+in let make-even = proc (odd-maker)
+                     proc (even-maker)
+                       proc (x)
+                       if zero?(x)
+                       then true
+                       else (((odd-maker even-maker) odd-maker) -(x, 1))
+   in let odd = ((make-odd make-even) make-odd)
+      in (odd 1145)
+"
+  )
+(check-equal? (run code3) (bool-val #t))
+
+(define code4
+  "
+let make-odd = proc (even-maker)
+                 proc (odd-maker)
+                   proc (x)
+                     if zero?(x)
+                     then false
+                     else (((even-maker odd-maker) even-maker) -(x, 1))
+in let make-even = proc (odd-maker)
+                     proc (even-maker)
+                       proc (x)
+                       if zero?(x)
+                       then true
+                       else (((odd-maker even-maker) odd-maker) -(x, 1))
+   in let odd = ((make-odd make-even) make-odd)
+       in (odd 114514)
+"
+  )
+(check-equal? (run code4) (bool-val #f))
