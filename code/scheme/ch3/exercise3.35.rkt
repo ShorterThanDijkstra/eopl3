@@ -56,40 +56,75 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
-(define-datatype environment environment?
-  (empty-env)
-  (extend-env
-   (var identifier?)
-   (val expval?)
-   (env environment?))
-  (extend-env-rec
-   (p-name identifier?)
-   (b-var identifier?)
-   (body expression?)
-   (env environment?)))
+; (define-datatype environment environment?
+;   (empty-env)
+;   (extend-env
+;    (var identifier?)
+;    (val expval?)
+;    (env environment?))
+;   (extend-env-rec
+;    (p-name identifier?)
+;    (b-var identifier?)
+;    (body expression?)
+;    (env environment?)))
+
+; (define apply-env
+;   (lambda (env search-var)
+;     (cases environment env
+;       (empty-env ()
+;                  (eopl:error 'apply-env))
+;       (extend-env (saved-var saved-val saved-env)
+;                   (if (eqv? saved-var search-var)
+;                       saved-val
+;                       (apply-env saved-env search-var)))
+;       (extend-env-rec (p-name b-var p-body saved-env)
+;                       (if (eqv? search-var p-name)
+;                           (proc-val (procedure b-var p-body env))
+;                           (apply-env saved-env search-var))))))
+(define empty-env
+  (lambda ()
+    (list 'env)))
+
+(define extend-env
+  (lambda (var val saved-env)
+    (list 'env var val saved-env)))
+
+(define extend-env-rec
+  (lambda (p-name b-var body saved-env)
+    (let ((vec (make-vector 1)))
+      (let ((new-env (extend-env p-name vec saved-env)))
+        (vector-set! vec 0
+                     (proc-val (procedure b-var body new-env)))
+        new-env))))
 
 (define apply-env
   (lambda (env search-var)
-    (cases environment env
-      (empty-env ()
-                 (eopl:error 'apply-env))
-      (extend-env (saved-var saved-val saved-env)
-                  (if (eqv? saved-var search-var)
-                      saved-val
-                      (apply-env saved-env search-var)))
-      (extend-env-rec (p-name b-var p-body saved-env)
-                      (if (eqv? search-var p-name)
-                          (proc-val (procedure b-var p-body env))
-                          (apply-env saved-env search-var))))))
+    (cond [(empty-env? env) (eopl:error 'apply-env)]
+          [(eqv? (env-var env) search-var)
+           (if (vector? (env-val env))
+               (vector-ref (env-val env) 0)
+               (env-val env))]
+          [else (apply-env (env-saved env) search-var)])))
 
-; (define extend-env-rec
-;   (lambda (p-name b-var body saved-env)
-;     (let ((vec (make-vector 1)))
-;       (let ((new-env (extend-env p-name vec saved-env)))
-;         (vector-set! vec 0
-;                      (proc-val (procedure b-var body new-env)))
-;         new-env))))
+(define env-var
+  (lambda (env)
+    (cadr env)))
 
+(define env-val
+  (lambda (env)
+    (caddr env)))
+
+(define env-saved
+  (lambda (env)
+    (cadddr env)))
+
+(define empty-env?
+  (lambda (env)
+    (equal? env (empty-env))))
+
+(define environment?
+  (lambda (env)
+    (eqv? (car env) 'env)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Expression data type
 (define identifier?
@@ -163,8 +198,6 @@
       (proc-exp (var body)
                 (proc-val (procedure var body env)))
       (call-exp (rator rand)
-                ; (write env)
-                ; (newline)
                 (let ((proc (expval->proc (value-of rator env)))
                       (arg (value-of rand env)))
                   (apply-procedure proc arg)))
@@ -201,10 +234,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define init-env
   (lambda ()
-    (extend-env 'true (bool-val #t)
-                (extend-env 'false (bool-val #f)
-                            (empty-env)))))
-
+    (empty-env)))
 
 ;;; run
 (define run

@@ -6,15 +6,15 @@
 ; procedure : Var × Exp × Env → Proc
 (define-datatype proc proc?
   (procedure
-   (var identifier?)
+   (vars (list-of identifier?))
    (body expression?)
    (saved-env environment?)))
 ; apply-procedure : Proc × ExpVal → ExpVal
 (define apply-procedure
-  (lambda (proc1 val)
+  (lambda (proc1 vals)
     (cases proc proc1
-      (procedure (var body saved-env)
-                 (value-of body (extend-env var val saved-env))))))
+      (procedure (vars body saved-env)
+                 (value-of body (extend-env-list vars vals saved-env))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; ExpVal data type
@@ -62,10 +62,10 @@
    (var identifier?)
    (val expval?)
    (env environment?))
-  (extend-env-rec
-   (p-name identifier?)
-   (b-var identifier?)
-   (body expression?)
+  (extend-env-rec-list
+   (p-names (list-of identifier?))
+   (b-varss (list-of (list-of identifier?)))
+   (bodies (list-of expression?))
    (env environment?)))
 
 (define apply-env
@@ -77,10 +77,23 @@
                   (if (eqv? saved-var search-var)
                       saved-val
                       (apply-env saved-env search-var)))
-      (extend-env-rec (p-name b-var p-body saved-env)
-                      (if (eqv? search-var p-name)
-                          (proc-val (procedure b-var p-body env))
-                          (apply-env saved-env search-var))))))
+      (extend-env-rec-list (p-names b-varss p-bodies saved-env)
+                           (let search ([p-names p-names]
+                                        [b-varss b-varss]
+                                        [p-bodies p-bodies])
+                             (if (null? p-names)
+                                 (apply-env saved-env search-var)
+                                 (if (eqv? (car p-names) search-var)
+                                     (proc-val (procedure (car b-varss) (car p-bodies) env))
+                                     (search (cdr p-names) (cdr b-varss) (cdr p-bodies)))))))))
+
+(define extend-env-list
+  (lambda (vars vals env)
+    (if (null? vars)
+        env
+        (extend-env (car vars)
+                    (car vals)
+                    (extend-env-list (cdr vars) (cdr vals) env)))))
 
 ; (define extend-env-rec
 ;   (lambda (p-name b-var body saved-env)
@@ -116,16 +129,16 @@
    (exp  expression?)
    (body expression?))
   (letrec-exp
-   (p-name identifier?)
-   (b-var identifier?)
-   (p-body expression?)
+   (p-names (list-of identifier?))
+   (b-varss (list-of (list-of identifier?)))
+   (p-bodies (list-of expression?))
    (letrec-body expression?))
   (proc-exp
    (var identifier?)
    (body expression?))
   (call-exp
    (rator expression?)
-   (rand expression?))
+   (rand (list-of expression?)))
   )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -158,16 +171,16 @@
       (let-exp (var exp body)
                (value-of body
                          (extend-env var (value-of exp env) env)))
-      (letrec-exp (proc-name bound-var proc-body letrec-body)
-                  (value-of letrec-body (extend-env-rec proc-name bound-var proc-body env)))
+      (letrec-exp (proc-names bound-varss proc-bodies letrec-body)
+                  (value-of letrec-body (extend-env-rec-list proc-names bound-varss proc-bodies env)))
       (proc-exp (var body)
                 (proc-val (procedure var body env)))
-      (call-exp (rator rand)
+      (call-exp (rator rands)
                 ; (write env)
                 ; (newline)
                 (let ((proc (expval->proc (value-of rator env)))
-                      (arg (value-of rand env)))
-                  (apply-procedure proc arg)))
+                      (args (map (lambda (rand) (value-of rand env)) rands)))
+                  (apply-procedure proc args)))
       )))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -190,9 +203,9 @@
     (expression ("zero?" "(" expression ")") zero?-exp)
     (expression ("if" expression "then" expression "else" expression) if-exp)
     (expression ("let" identifier "=" expression "in" expression) let-exp)
-    (expression ("letrec" identifier "(" identifier ")" "=" expression "in" expression) letrec-exp)
+    (expression ("letrec" (arbno identifier "(" (arbno identifier) ")" "=" expression) "in" expression) letrec-exp)
     (expression ("proc" "(" identifier ")" expression) proc-exp)
-    (expression ("(" expression expression ")") call-exp)
+    (expression ("(" expression (arbno expression ) ")") call-exp)
     ))
 
 (define scan&parse
@@ -213,17 +226,37 @@
 
 ;;; test
 (define code1
-  "
-  letrec double(x)
-          = if zero?(x) then 0 else -((double -(x,1)), -2)
-  in (double 6)
-   ")
-(check-equal? (run code1) (num-val 12))
+  "letrec
+      add(x y) = if zero?(x) then y else -((add -(x, 1) y), -1)
+      evenSum(x y) = if zero?((add x y)) then true else (oddSum -((add x y), 1) 0)
+      oddSum(x y) = if zero?((add x y)) then false else (evenSum -((add x y), 1) 0)
+    in (oddSum 114 514)
+  ")
+(check-equal? (run code1) (bool-val #f))
 
 (define code2
-  "
-  letrec id(x)
-          = x
-  in (id 0)
-   ")
-(check-equal? (run code2) (num-val 0))
+  "letrec
+      add(x y) = if zero?(x) then y else -((add -(x, 1) y), -1)
+      evenSum(x y) = if zero?((add x y)) then true else (oddSum -((add x y), 1) 0)
+      oddSum(x y) = if zero?((add x y)) then false else (evenSum -((add x y), 1) 0)
+    in (oddSum 114 51)
+  ")
+(check-equal? (run code2) (bool-val #t))
+
+(define code3
+  "letrec
+      add(x y) = if zero?(x) then y else -((add -(x, 1) y), -1)
+      evenSum(x y) = if zero?((add x y)) then true else (oddSum -((add x y), 1) 0)
+      oddSum(x y) = if zero?((add x y)) then false else (evenSum -((add x y), 1) 0)
+    in (evenSum 114 45)
+  ")
+(check-equal? (run code3) (bool-val #f))
+
+(define code4
+  "letrec
+      add(x y) = if zero?(x) then y else -((add -(x, 1) y), -1)
+      evenSum(x y) = if zero?((add x y)) then true else (oddSum -((add x y), 1) 0)
+      oddSum(x y) = if zero?((add x y)) then false else (evenSum -((add x y), 1) 0)
+    in (evenSum 11 451)
+  ")
+(check-equal? (run code4) (bool-val #t))

@@ -56,40 +56,58 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
-(define-datatype environment environment?
-  (empty-env)
-  (extend-env
-   (var identifier?)
-   (val expval?)
-   (env environment?))
-  (extend-env-rec
-   (p-name identifier?)
-   (b-var identifier?)
-   (body expression?)
-   (env environment?)))
+(define empty-env
+  (lambda ()
+    (list 'env)))
+
+(define extend-env
+  (lambda (var val saved-env)
+    (list 'env var val saved-env)))
+
+(define extend-env-rec
+  (lambda (p-names b-vars bodys saved-env)
+    (letrec ((make-new-env (lambda (names)
+                             (if (null? names)
+                                 saved-env
+                                 (extend-env (car names) (make-vector 1) (make-new-env (cdr names)))))))
+      (let ((new-env (make-new-env p-names)))
+        (letrec ((set!-new-env (lambda (vars bodys env)
+                                 (if (null? vars)
+                                     new-env
+                                     (let ((vec (env-val env)))
+                                       (begin
+                                         (vector-set! vec 0 (proc-val (procedure (car vars) (car bodys) new-env)))
+                                         (set!-new-env (cdr vars) (cdr bodys) (env-saved env))))))))
+          (set!-new-env b-vars bodys new-env))))))
 
 (define apply-env
   (lambda (env search-var)
-    (cases environment env
-      (empty-env ()
-                 (eopl:error 'apply-env))
-      (extend-env (saved-var saved-val saved-env)
-                  (if (eqv? saved-var search-var)
-                      saved-val
-                      (apply-env saved-env search-var)))
-      (extend-env-rec (p-name b-var p-body saved-env)
-                      (if (eqv? search-var p-name)
-                          (proc-val (procedure b-var p-body env))
-                          (apply-env saved-env search-var))))))
+    (cond [(empty-env? env) (eopl:error 'apply-env (symbol->string search-var))]
+          [(eqv? (env-var env) search-var)
+           (if (vector? (env-val env))
+               (vector-ref (env-val env) 0)
+               (env-val env))]
+          [else (apply-env (env-saved env) search-var)])))
 
-; (define extend-env-rec
-;   (lambda (p-name b-var body saved-env)
-;     (let ((vec (make-vector 1)))
-;       (let ((new-env (extend-env p-name vec saved-env)))
-;         (vector-set! vec 0
-;                      (proc-val (procedure b-var body new-env)))
-;         new-env))))
+(define env-var
+  (lambda (env)
+    (cadr env)))
 
+(define env-val
+  (lambda (env)
+    (caddr env)))
+
+(define env-saved
+  (lambda (env)
+    (cadddr env)))
+
+(define empty-env?
+  (lambda (env)
+    (equal? env (empty-env))))
+
+(define environment?
+  (lambda (env)
+    (eqv? (car env) 'env)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Expression data type
 (define identifier?
@@ -116,9 +134,9 @@
    (exp  expression?)
    (body expression?))
   (letrec-exp
-   (p-name identifier?)
-   (b-var identifier?)
-   (p-body expression?)
+   (p-names (list-of identifier?))
+   (b-vars (list-of identifier?))
+   (p-body (list-of expression?))
    (letrec-body expression?))
   (proc-exp
    (var identifier?)
@@ -158,13 +176,12 @@
       (let-exp (var exp body)
                (value-of body
                          (extend-env var (value-of exp env) env)))
-      (letrec-exp (proc-name bound-var proc-body letrec-body)
-                  (value-of letrec-body (extend-env-rec proc-name bound-var proc-body env)))
+      (letrec-exp (proc-names bound-vars proc-bodys letrec-body)
+                  (value-of letrec-body
+                            (extend-env-rec proc-names bound-vars proc-bodys env)))
       (proc-exp (var body)
                 (proc-val (procedure var body env)))
       (call-exp (rator rand)
-                ; (write env)
-                ; (newline)
                 (let ((proc (expval->proc (value-of rator env)))
                       (arg (value-of rand env)))
                   (apply-procedure proc arg)))
@@ -190,7 +207,7 @@
     (expression ("zero?" "(" expression ")") zero?-exp)
     (expression ("if" expression "then" expression "else" expression) if-exp)
     (expression ("let" identifier "=" expression "in" expression) let-exp)
-    (expression ("letrec" identifier "(" identifier ")" "=" expression "in" expression) letrec-exp)
+    (expression ("letrec" (arbno identifier "(" identifier ")" "=" expression)"in" expression) letrec-exp)
     (expression ("proc" "(" identifier ")" expression) proc-exp)
     (expression ("(" expression expression ")") call-exp)
     ))
@@ -214,16 +231,36 @@
 ;;; test
 (define code1
   "
-  letrec double(x)
-          = if zero?(x) then 0 else -((double -(x,1)), -2)
-  in (double 6)
-   ")
-(check-equal? (run code1) (num-val 12))
+  letrec
+    even(x) = if zero?(x) then true else (odd -(x,1))
+    odd(x) = if zero?(x) then false else (even -(x,1))
+  in (odd 14)
+")
+(check-equal? (run code1) (bool-val #f))
 
 (define code2
   "
-  letrec id(x)
-          = x
-  in (id 0)
-   ")
-(check-equal? (run code2) (num-val 0))
+  letrec
+    even(x) = if zero?(x) then true else (odd -(x,1))
+    odd(x) = if zero?(x) then false else (even -(x,1))
+  in (odd 15)
+")
+(check-equal? (run code2) (bool-val #t))
+
+(define code3
+  "
+  letrec
+    even(x) = if zero?(x) then true else (odd -(x,1))
+    odd(x) = if zero?(x) then false else (even -(x,1))
+  in (odd 114514)
+")
+(check-equal? (run code3) (bool-val #f))
+
+(define code4
+  "
+  letrec
+    even(x) = if zero?(x) then true else (odd -(x,1))
+    odd(x) = if zero?(x) then false else (even -(x,1))
+  in (even 114514)
+")
+(check-equal? (run code4) (bool-val #t))

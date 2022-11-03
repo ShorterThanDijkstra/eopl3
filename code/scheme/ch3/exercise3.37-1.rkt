@@ -111,6 +111,9 @@
   (diff-exp
    (exp1 expression?)
    (exp2 expression?))
+  (mul-exp
+   (exp1 expression?)
+   (exp2 expression?))
   (let-exp
    (var  identifier?)
    (exp  expression?)
@@ -144,6 +147,13 @@
                         (num2 (expval->num val2)))
                     (num-val
                      (- num1 num2)))))
+       (mul-exp (exp1 exp2)
+                (let ((val1 (value-of exp1 env))
+                      (val2 (value-of exp2 env)))
+                  (let ((num1 (expval->num val1))
+                        (num2 (expval->num val2)))
+                    (num-val
+                     (* num1 num2)))))
       (if-exp (exp1 exp2 exp3)
               (let ((val1 (value-of exp1 env)))
                 (if (expval->bool val1)
@@ -187,6 +197,7 @@
     (expression (number) const-exp)
     (expression (identifier) var-exp)
     (expression ("-" "(" expression "," expression ")") diff-exp)
+    (expression ("*" "(" expression "," expression ")") mul-exp)
     (expression ("zero?" "(" expression ")") zero?-exp)
     (expression ("if" expression "then" expression "else" expression) if-exp)
     (expression ("let" identifier "=" expression "in" expression) let-exp)
@@ -206,24 +217,18 @@
                             (empty-env)))))
 
 
-;;; run
 (define run
   (lambda (code)
     (value-of (scan&parse code) (init-env))))
 
-;;; test
+;;; play ground
 (define code1
-  "
-  letrec double(x)
-          = if zero?(x) then 0 else -((double -(x,1)), -2)
-  in (double 6)
-   ")
-(check-equal? (run code1) (num-val 12))
-
-(define code2
-  "
-  letrec id(x)
-          = x
-  in (id 0)
-   ")
-(check-equal? (run code2) (num-val 0))
+  "let fact = proc (n) -(n, -1)
+   in let fact = proc (n)
+                  if zero?(n)
+                  then 1
+                  else *(n, (fact -(n,1)))
+      in (fact 5)"
+  )
+(check-equal? (run code1) (num-val 25))
+; lexical binding: 25

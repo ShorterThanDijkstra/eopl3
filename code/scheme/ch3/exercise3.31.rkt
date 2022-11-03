@@ -6,15 +6,15 @@
 ; procedure : Var × Exp × Env → Proc
 (define-datatype proc proc?
   (procedure
-   (var identifier?)
+   (vars (list-of identifier?))
    (body expression?)
    (saved-env environment?)))
 ; apply-procedure : Proc × ExpVal → ExpVal
 (define apply-procedure
-  (lambda (proc1 val)
+  (lambda (proc1 vals)
     (cases proc proc1
-      (procedure (var body saved-env)
-                 (value-of body (extend-env var val saved-env))))))
+      (procedure (vars body saved-env)
+                 (value-of body (extend-env-list vars vals saved-env))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; ExpVal data type
@@ -64,7 +64,7 @@
    (env environment?))
   (extend-env-rec
    (p-name identifier?)
-   (b-var identifier?)
+   (b-vars (list-of identifier?))
    (body expression?)
    (env environment?)))
 
@@ -77,10 +77,18 @@
                   (if (eqv? saved-var search-var)
                       saved-val
                       (apply-env saved-env search-var)))
-      (extend-env-rec (p-name b-var p-body saved-env)
+      (extend-env-rec (p-name b-vars p-body saved-env)
                       (if (eqv? search-var p-name)
-                          (proc-val (procedure b-var p-body env))
+                          (proc-val (procedure b-vars p-body env))
                           (apply-env saved-env search-var))))))
+
+(define extend-env-list
+  (lambda (vars vals env)
+    (if (null? vars)
+        env
+        (extend-env (car vars)
+                    (car vals)
+                    (extend-env-list (cdr vars) (cdr vals) env)))))
 
 ; (define extend-env-rec
 ;   (lambda (p-name b-var body saved-env)
@@ -117,7 +125,7 @@
    (body expression?))
   (letrec-exp
    (p-name identifier?)
-   (b-var identifier?)
+   (b-vars (list-of identifier?))
    (p-body expression?)
    (letrec-body expression?))
   (proc-exp
@@ -125,7 +133,7 @@
    (body expression?))
   (call-exp
    (rator expression?)
-   (rand expression?))
+   (rand (list-of expression?)))
   )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -158,16 +166,16 @@
       (let-exp (var exp body)
                (value-of body
                          (extend-env var (value-of exp env) env)))
-      (letrec-exp (proc-name bound-var proc-body letrec-body)
-                  (value-of letrec-body (extend-env-rec proc-name bound-var proc-body env)))
+      (letrec-exp (proc-name bound-vars proc-body letrec-body)
+                  (value-of letrec-body (extend-env-rec proc-name bound-vars proc-body env)))
       (proc-exp (var body)
                 (proc-val (procedure var body env)))
-      (call-exp (rator rand)
+      (call-exp (rator rands)
                 ; (write env)
                 ; (newline)
                 (let ((proc (expval->proc (value-of rator env)))
-                      (arg (value-of rand env)))
-                  (apply-procedure proc arg)))
+                      (args (map (lambda (rand) (value-of rand env)) rands)))
+                  (apply-procedure proc args)))
       )))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -190,9 +198,9 @@
     (expression ("zero?" "(" expression ")") zero?-exp)
     (expression ("if" expression "then" expression "else" expression) if-exp)
     (expression ("let" identifier "=" expression "in" expression) let-exp)
-    (expression ("letrec" identifier "(" identifier ")" "=" expression "in" expression) letrec-exp)
+    (expression ("letrec" identifier "(" (arbno identifier) ")" "=" expression "in" expression) letrec-exp)
     (expression ("proc" "(" identifier ")" expression) proc-exp)
-    (expression ("(" expression expression ")") call-exp)
+    (expression ("(" expression (arbno expression ) ")") call-exp)
     ))
 
 (define scan&parse
@@ -201,10 +209,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define init-env
   (lambda ()
-    (extend-env 'true (bool-val #t)
-                (extend-env 'false (bool-val #f)
-                            (empty-env)))))
-
+    (empty-env)))
 
 ;;; run
 (define run
@@ -214,16 +219,16 @@
 ;;; test
 (define code1
   "
-  letrec double(x)
-          = if zero?(x) then 0 else -((double -(x,1)), -2)
-  in (double 6)
+  letrec add(x y)
+          = if zero?(x) then y else -((add -(x, 1) y), -1)
+  in (add 7 6)
    ")
-(check-equal? (run code1) (num-val 12))
+(check-equal? (run code1) (num-val 13))
 
 (define code2
   "
-  letrec id(x)
-          = x
-  in (id 0)
+  letrec sum(x y z)
+          = -(x, -(0, -(y, -(0, z))))
+  in (sum 3 4 5)
    ")
-(check-equal? (run code2) (num-val 0))
+(check-equal? (run code2) (num-val 12))

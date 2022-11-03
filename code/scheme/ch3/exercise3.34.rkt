@@ -56,40 +56,59 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
-(define-datatype environment environment?
-  (empty-env)
-  (extend-env
-   (var identifier?)
-   (val expval?)
-   (env environment?))
-  (extend-env-rec
-   (p-name identifier?)
-   (b-var identifier?)
-   (body expression?)
-   (env environment?)))
 
+; empty-env : () → Env
+(define empty-env
+  (lambda ()
+    (lambda (op)
+      (cond
+        [(eqv? op 'envrionment?) #t]
+        [(eqv? op 'empty?) #t]
+        [(eqv? op 'search)
+         (lambda (search-var)
+           (eopl:error 'empty-env))]
+        [else (eopl:error 'empty-env)]))))
+
+; extend-env : Var × SchemeVal × Env → Env
+(define extend-env
+  (lambda (saved-var saved-val saved-env)
+    (lambda (op)
+      (cond
+        [(eqv? op 'envrionment?) #t]
+        [(eqv? op 'empty?) #f]
+        [(eqv? op 'search)
+         (lambda (search-var)
+           (if (eqv? search-var saved-var)
+               saved-val
+               (apply-env saved-env search-var)))]
+        [else (eopl:error 'extend-env)]))))
+
+; extend-env : Var × Var × Expression × Env → Env
+(define extend-env-rec
+  (lambda (proc-name bound-var proc-body saved-env)
+    (letrec ((env
+              (lambda (op)
+                (cond
+                  [(eqv? op 'envrionment?) #t]
+                  [(eqv? op 'empty?) #f]
+                  [(eqv? op 'search)
+                   (lambda (search-var)
+                     (if (eqv? search-var proc-name)
+                         (proc-val (procedure bound-var proc-body env))
+                         (apply-env saved-env search-var)))]
+                  [else (eopl:error 'extend-env-rec)]))))
+      env)))
+
+; apply-env : Env × Var → SchemeVal
 (define apply-env
   (lambda (env search-var)
-    (cases environment env
-      (empty-env ()
-                 (eopl:error 'apply-env))
-      (extend-env (saved-var saved-val saved-env)
-                  (if (eqv? saved-var search-var)
-                      saved-val
-                      (apply-env saved-env search-var)))
-      (extend-env-rec (p-name b-var p-body saved-env)
-                      (if (eqv? search-var p-name)
-                          (proc-val (procedure b-var p-body env))
-                          (apply-env saved-env search-var))))))
+    ((env 'search) search-var)))
 
-; (define extend-env-rec
-;   (lambda (p-name b-var body saved-env)
-;     (let ((vec (make-vector 1)))
-;       (let ((new-env (extend-env p-name vec saved-env)))
-;         (vector-set! vec 0
-;                      (proc-val (procedure b-var body new-env)))
-;         new-env))))
-
+(define environment?
+  (lambda (env)
+    (if (procedure? env)
+        (env 'envrionment?)
+        #f)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Expression data type
 (define identifier?
@@ -201,10 +220,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define init-env
   (lambda ()
-    (extend-env 'true (bool-val #t)
-                (extend-env 'false (bool-val #f)
-                            (empty-env)))))
-
+    (empty-env)))
 
 ;;; run
 (define run
