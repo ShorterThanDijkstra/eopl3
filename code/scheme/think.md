@@ -3,3 +3,5 @@
 3. exercise 3.24
 4. exercise 3.25
 5. exercise 3.26
+6. exercise 3.40
+
