@@ -1,7 +1,7 @@
 #lang eopl
 (require rackunit)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Senv = Listof(Pair(Sym Bool))
+; Senv = Listof(Pair(Sym Type))
 ; Lexaddr = N
 ; empty-senv : () → Senv
 (define empty-senv
@@ -11,11 +11,11 @@
 ; extend-senv : Var × Senv → Senv
 (define extend-senv
   (lambda (var senv)
-    (cons (cons var #f) senv)))
+    (cons (cons var 'var) senv)))
 
 (define extend-senv-rec
-  (lambda (var p-body senv)
-    (cons (cons var p-body) senv)))
+  (lambda (var senv)
+    (cons (cons var 'letrec-var) senv)))
 
 ; apply-senv : Senv × Var → Letrec? × Lexaddr
 (define apply-senv
@@ -26,11 +26,11 @@
         ((null? senv)
          (eopl:error 'report-unbound-var ))
         ((eqv? var (car (car senv)))
-         (if (cdr (car senv))
-             (list #t (lambda () (nameless-proc-exp (translation-of (cdr (car senv)) senv))))
-             (list #f addr)))
-        ((cdr (car senv))
-         (go (cdr senv) addr))
+         (cond  ((eqv? 'letrec-var (cdr (car senv)))
+                 (nameless-letrec-var-exp addr))
+                ((eqv? 'var (cdr (car senv)))
+                 (nameless-var-exp addr))
+                (else (eopl:error 'apply-senv))))
         (else
          (go (cdr senv) (+ addr 1)))))))
 
@@ -66,9 +66,10 @@
    (p-body expression?)
    (letrec-body expression?))
   (nameless-letrec-exp
+   (proc1 expression?)
    (letrec-body expression?))
   (nameless-letrec-var-exp
-   (p-body procedure?))
+   (num number?))
   (nameless-let-exp
    (exp1 expression?)
    (body expression?))
@@ -122,20 +123,19 @@
                (translation-of exp2 senv)
                (translation-of exp3 senv)))
       (var-exp (var)
-               (let ((is-rec&addr (apply-senv senv var)))
-                 (if (car is-rec&addr)
-                     (nameless-letrec-var-exp (cadr is-rec&addr))
-                     (nameless-var-exp (cadr is-rec&addr)))))
+               (apply-senv senv var))
       (let-exp (var exp1 body)
                (nameless-let-exp
                 (translation-of exp1 senv)
                 (translation-of body
                                 (extend-senv var senv))))
       (letrec-exp (p-name b-var p-body letrec-body)
-                  (let ((new-senv (extend-senv-rec p-name p-body (extend-senv b-var senv))))
+                  (let ((p-body-senv (extend-senv b-var  (extend-senv-rec p-name senv)))
+                        (letrec-body-senv (extend-senv-rec p-name senv)))
                     (nameless-letrec-exp
-                     (translation-of letrec-body new-senv))))
-      
+                     (translation-of p-body p-body-senv)
+                     (translation-of letrec-body letrec-body-senv))))
+
       (proc-exp (var body)
                 (nameless-proc-exp
                  (translation-of body
@@ -186,7 +186,7 @@
   (lambda (v)
     (cases expval v
       	(proc-val (proc) proc)
-      	(else (eopl:error 'expval->proc)))))
+      	(else (eopl:error "expval->proc ~s" v)))))
 
 (define expval->scheme-val
   (lambda (v)
@@ -247,10 +247,20 @@
                         (let ((val (value-of exp1 nameless-env)))
                           (value-of body
                                     (extend-nameless-env val nameless-env))))
-      (nameless-letrec-exp (letrec-body)
-                             (value-of letrec-body nameless-env))
-      (nameless-letrec-var-exp (p-body)
-                               (value-of (p-body) nameless-env))
+      (nameless-letrec-exp (p-body letrec-body)
+                           (let ((proc1 (proc-val (procedure p-body nameless-env))))
+                             (value-of letrec-body (extend-nameless-env proc1 nameless-env))))
+      (nameless-letrec-var-exp (num)
+        (letrec ((drop (lambda (ls n)
+                      (if (= 0 n)
+                          ls
+                          (drop (cdr ls) (- n 1))))))
+          (let* ((new-nameless-env (drop nameless-env num))
+                 (proc-expval (car new-nameless-env))
+                 (proc1 (expval->proc proc-expval)))
+            (cases proc proc1
+              (procedure (body saved-nameless-env)
+                         (proc-val (procedure body new-nameless-env)))))))
       (nameless-proc-exp (body)
                          (proc-val
                           (procedure body nameless-env)))
@@ -308,7 +318,7 @@
 
 ;;;test
 (define source1
-   "
+  "
   letrec double(x)
           = if zero?(x) then 0 else -((double -(x,1)), -2)
   in (double 6)
@@ -334,3 +344,14 @@
    "
   )
 (check-equal? (run source3) (num-val 720))
+
+
+(define source4
+  "
+  let add1 = proc(x) -(x, -1)
+     in letrec add(x) = proc(y) if zero?(y) then x else (add1 ((add x) -(y, 1)))
+        in ((add 114) 514)          
+   "
+  )
+
+(check-equal? (run source4) (num-val 628))
