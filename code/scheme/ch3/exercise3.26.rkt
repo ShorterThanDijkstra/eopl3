@@ -182,8 +182,10 @@
                (value-of body
                          (extend-env var (value-of exp env) env)))
       (proc-exp (var body)
-                (let ((frees (free-variables body '())))
-                  (proc-val (procedure var body (env-free env) frees))))
+                (let ((frees (free-variables body (list var))))
+                  ; (write frees)
+                  ; (newline)
+                  (proc-val (procedure var body (trim-env env frees)))))
       (call-exp (rator rand)
                 (let ((proc (expval->proc (value-of rator env)))
                       (arg (value-of rand env)))
@@ -217,14 +219,47 @@
                 (append (free-variables rator bounds)
                         (free-variables rand bounds))])))
 
-(define env-free
+(define trim-env
   (lambda (env frees)
-    (let ([sym (extended-env-record->sym env)]
-          [val (extended-env-record->val env)]
-          [old-env (extended-env-record->old-env env)])
-      (if (memq sym frees)
-          (extend-env sym val (env-free old-env frees))
-          (env-free old-env frees)))))
+    (if (null? env)
+        (empty-env)
+        (let ([sym (extended-env-record->sym env)]
+              [val (extended-env-record->val env)]
+              [old-env (extended-env-record->old-env env)])
+          (if (memq sym frees)
+              (extend-env sym val (trim-env old-env frees))
+              (trim-env old-env frees))))))
+;;; run
+(define the-lexical-spec
+  '((whitespace (whitespace) skip)
+    (comment ("%" (arbno (not #\newline))) skip)
+    (identifier
+     (letter (arbno (or letter digit "_" "-" "?")))
+     symbol)
+    (number (digit (arbno digit)) number)
+    (number ("-" digit (arbno digit)) number)
+    ))
+
+(define the-grammar
+  '(
+    (expression (number) const-exp)
+    (expression (identifier) var-exp)
+    (expression ("-" "(" expression "," expression ")") diff-exp)
+    (expression ("if" expression "then" expression "else" expression) if-exp)
+    (expression ("let" identifier "=" expression "in" expression) let-exp)
+    (expression ("proc" "(" identifier ")" expression) proc-exp)
+    (expression ("(" expression expression ")") call-exp)
+    ))
+(define scan&parse
+  (sllgen:make-string-parser the-lexical-spec the-grammar))
+(define run
+  (lambda (string)
+    (value-of (scan&parse string) (init-env))))
 
 ;;; test
-;;; skip
+(run "proc(x) -(x, 1)")
+(run "proc(x) -(x, v)")
+
+(run "(proc(x) -(x,v)  30)")
+(run "let f = proc (x) -(x,1) in (f 30)")
+(run "(proc(f)(f 30)  proc(x)-(x,1))")
