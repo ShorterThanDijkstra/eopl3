@@ -1,6 +1,7 @@
 #lang eopl
 (require rackunit)
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Procedure data type
 ; procedure : Var × Exp × Env → Proc
@@ -16,6 +17,7 @@
       (procedure (var body saved-env)
                  (value-of body (extend-env var val saved-env))))))
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; ExpVal data type
 (define-datatype expval expval?
@@ -24,35 +26,95 @@
   (bool-val
    (boolean boolean?))
   (proc-val (proc proc?))
+  (ref-val
+   (val reference?))
   )
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; ExpVal -> scheme value
 
 (define expval->num
   (lambda (v)
     (cases expval v
       	(num-val (num) num)
-      	(else (eopl:error)))))
+      	(else (eopl:error 'expval->num "~s" v)))))
 
 (define expval->bool
   (lambda (v)
     (cases expval v
       	(bool-val (bool) bool)
-      	(else (eopl:error)))))
+      	(else (eopl:error 'expval->bool "~s" v)))))
 
 (define expval->proc
   (lambda (v)
     (cases expval v
       	(proc-val (proc) proc)
-      	(else (eopl:error)))))
+      	(else (eopl:error 'expval->proc "~s" v)))))
 
-(define expval->scheme-val
+(define expval->ref
   (lambda (v)
     (cases expval v
-      (num-val (num) num)
-      (bool-val (bool) bool)
-      (proc-val (proc) proc))))
+      	(ref-val (ref) ref)
+      	(else ((eopl:error 'expval->ref "~s" v))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Store
+; empty-store : () → Sto
+(define empty-store
+  (lambda () '()))
+; usage: A Scheme variable containing the current state
+; of the store. Initially set to a dummy value.
+
+(define the-store 'uninitialized)
+
+; get-store : () → Sto
+(define get-store
+  (lambda () the-store))
+
+; initialize-store! : () → Unspecified
+; usage: (initialize-store!) sets the-store to the empty store
+(define initialize-store!
+  (lambda ()
+    (set! the-store (empty-store))))
+
+; reference? : SchemeVal → Bool
+(define reference?
+  (lambda (v)
+    (integer? v)))
+
+; newref : ExpVal → Ref
+(define newref
+  (lambda (val)
+    (let ((next-ref (length the-store)))
+      (set! the-store (append the-store (list val)))
+      next-ref)))
+
+; deref : Ref → ExpVal
+(define deref
+  (lambda (ref)
+    (list-ref the-store ref)))
+
+; setref! : Ref × ExpVal → Unspecified
+; usage: sets the-store to a state like the original, but with
+; position ref containing val.
+(define setref!
+  (lambda (ref val)
+    (set! the-store
+          (letrec
+              ((setref-inner
+                ; usage: returns a list like store1, except that
+                ; position ref1 contains val.
+                (lambda (store1 ref1)
+                  (cond
+                    ((null? store1)
+                     (eopl:error "report-invalid-reference ~s" ref the-store))
+                    ((zero? ref1)
+                     (cons val (cdr store1)))
+                    (else
+                     (cons
+                      (car store1)
+                      (setref-inner
+                       (cdr store1) (- ref1 1))))))))
+            (setref-inner the-store ref)))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
@@ -118,7 +180,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Expression data type
+;;; Expression data type && Program
 (define identifier?
   (lambda (exp)
     (and (symbol? exp)
@@ -148,20 +210,19 @@
   (call-exp
    (rator expression?)
    (rand expression?))
+  (newref-exp
+   (exp1 expression?))
+  (deref-exp
+   (exp1 expression?))
+  (setref-exp
+   (exp1 expression?)
+   (exp2 expression?))
   )
 
+(define-datatype program program?
+  (a-program (exp1 expression?)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Interpreter
-
-(define init-env
-  (lambda ()
-    (extend-env
-     'i (num-val 1)
-     (extend-env
-      'v (num-val 5)
-      (extend-env
-       'x (num-val 10)
-       (empty-env))))))
 
 ; value-of : Exp × Env → ExpVal
 (define value-of
@@ -196,13 +257,76 @@
                 (let ((proc (expval->proc (value-of rator env)))
                       (arg (value-of rand env)))
                   (apply-procedure proc arg)))
+      (newref-exp (exp1)
+                  (let ((v1 (value-of exp1 env)))
+                    (ref-val (newref v1))))
+      (deref-exp (exp1)
+                 (let ((v1 (value-of exp1 env)))
+                   (let ((ref1 (expval->ref v1)))
+                     (deref ref1))))
+      (setref-exp (exp1 exp2)
+                  (let ((ref (expval->ref (value-of exp1 env))))
+                    (let ((val2 (value-of exp2 env)))
+                      (begin
+                        (setref! ref val2)
+                        (num-val 23)))))
+
       )))
 
 
-;;; test of recursive proc
-(define rec-code
-  (let-exp
-   'rec
-   (proc-exp 'x (call-exp (var-exp 'rec) (var-exp 'x)))
-   (call-exp (var-exp 'rec) (const-exp 1))))
-; (value-of rec-code (init-env)) ;error
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;run
+(define the-lexical-spec
+  '((whitespace (whitespace) skip)
+    (comment ("%" (arbno (not #\newline))) skip)
+    (identifier
+     (letter (arbno (or letter digit "_" "-" "?")))
+     symbol)
+    (number (digit (arbno digit)) number)
+    (number ("-" digit (arbno digit)) number)
+    ))
+
+(define the-grammar-spec
+  '((program    (expression) a-program)
+    (expression (number) const-exp)
+    (expression (identifier) var-exp)
+    (expression ("-" "(" expression "," expression ")") diff-exp)
+    (expression ("zero?" "(" expression ")") zero?-exp)
+    (expression ("if" expression "then" expression "else" expression) if-exp)
+    (expression ("let" identifier "=" expression "in" expression) let-exp)
+    (expression ("proc" "(" identifier ")" expression) proc-exp)
+    (expression ("(" expression expression ")") call-exp)
+    (expression ("newref" "(" expression ")") newref-exp)
+    (expression ("deref" "(" expression ")") deref-exp)
+    (expression ("setref" "(" expression ")") setref-exp)
+    ))
+
+(define scan&parse
+  (sllgen:make-string-parser the-lexical-spec the-grammar-spec))
+
+(define init-env
+  (lambda ()
+    (extend-env 'true (bool-val #t)
+                (extend-env 'false (bool-val #f)
+                            (empty-env)))))
+
+; value-of-program : Program → ExpVal
+(define value-of-program
+  (lambda (pgm)
+    (initialize-store!)
+    (cases program pgm
+      (a-program (exp1)
+                 (value-of exp1 (init-env))))))
+
+(define run
+  (lambda (string)
+    (value-of-program (scan&parse string))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;test
+(define str1
+  "let x = newref(22)
+   in let f = proc (z) let zz = newref(-(z,deref(x)))
+                       in deref(zz)
+      in -((f 66), (f 55))")

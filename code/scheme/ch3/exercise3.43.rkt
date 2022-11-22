@@ -316,3 +316,12 @@
 (define target3
   (translation-of-program (scan&parse source3)))
 (check-equal? (run source3) (num-val 10))
+
+
+(define source4
+  "let f = proc (x) proc (y) -(y,-(0, x))
+      in ((f 3) 4)"
+      )
+(define target4
+  (translation-of-program (scan&parse source4)))
+(check-equal? (run source4) (num-val 7))

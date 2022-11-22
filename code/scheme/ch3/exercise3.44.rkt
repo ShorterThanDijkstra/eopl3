@@ -300,7 +300,7 @@
   "let g = 10
    in let f1 = proc (x) -(x, 1)
       in let f2 = proc (y) (f1 g)
-         in (f2 10)"
+         in (f2 11)"
 )
 
 (define target2
@@ -314,3 +314,11 @@
 (define target3
   (translation-of-program (scan&parse source3)))
 (check-equal? (run source3) (num-val 10))
+
+(define source4
+  "let f = proc (x) proc (y) -(y,-(0, x))
+      in ((f 3) 4)"
+      )
+(define target4
+  (translation-of-program (scan&parse source4)))
+(check-equal? (run source4) (num-val 7))
