@@ -59,7 +59,7 @@
 ; Store
 ; empty-store : () → Sto
 (define empty-store
-  (lambda () '()))
+  (lambda () (vector)))
 ; usage: A Scheme variable containing the current state
 ; of the store. Initially set to a dummy value.
 
@@ -83,37 +83,29 @@
 ; newref : ExpVal → Ref
 (define newref
   (lambda (val)
-    (let ((next-ref (length the-store)))
-      (set! the-store (append the-store (list val)))
-      next-ref)))
+    (let* ((next-ref (vector-length the-store))
+           (new-vec (make-vector (+ next-ref 1))))
+      (let loop! ((index 0))
+        (if (= index next-ref)
+            (begin
+              (vector-set! new-vec index val)
+              (set! the-store new-vec)
+              next-ref)
+            (let ((val (vector-ref the-store index)))
+              (vector-set! new-vec index val)
+              (loop! (+ index 1))))))))
 
 ; deref : Ref → ExpVal
 (define deref
   (lambda (ref)
-    (list-ref the-store ref)))
+    (vector-ref the-store ref)))
 
 ; setref! : Ref × ExpVal → Unspecified
 ; usage: sets the-store to a state like the original, but with
 ; position ref containing val.
 (define setref!
   (lambda (ref val)
-    (set! the-store
-          (letrec
-              ((setref-inner
-                ; usage: returns a list like store1, except that
-                ; position ref1 contains val.
-                (lambda (store1 ref1)
-                  (cond
-                    ((null? store1)
-                     (eopl:error "report-invalid-reference ~s" ref the-store))
-                    ((zero? ref1)
-                     (cons val (cdr store1)))
-                    (else
-                     (cons
-                      (car store1)
-                      (setref-inner
-                       (cdr store1) (- ref1 1))))))))
-            (setref-inner the-store ref)))))
+    (vector-set! the-store ref val)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

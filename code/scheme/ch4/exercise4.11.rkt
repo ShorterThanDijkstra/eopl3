@@ -26,6 +26,10 @@
   (bool-val
    (boolean boolean?))
   (proc-val (proc proc?))
+  (nil-val)
+  (pair-val
+   (fst expval?)
+   (snd expval?))
   (ref-val
    (val reference?))
   )
@@ -54,12 +58,30 @@
       	(ref-val (ref) ref)
       	(else ((eopl:error 'expval->ref "~s" v))))))
 
+(define expval->pair-val-fst
+  (lambda (v)
+    (cases expval v
+      	(pair-val (fst _) fst)
+      	(else ((eopl:error 'expval->pair-val-fst "~s" v))))))
+
+(define expval->pair-val-snd
+  (lambda (v)
+    (cases expval v
+      	(pair-val (_ snd) snd)
+      	(else ((eopl:error 'expval->pair-val-snd "~s" v))))))
+
+(define nil-val?
+  (lambda (v)
+    (cases expval v
+      (nil-val () #t)
+      (else #f))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Store
 ; empty-store : () → Sto
 (define empty-store
-  (lambda () '()))
+  (lambda () (vector)))
 ; usage: A Scheme variable containing the current state
 ; of the store. Initially set to a dummy value.
 
@@ -83,37 +105,29 @@
 ; newref : ExpVal → Ref
 (define newref
   (lambda (val)
-    (let ((next-ref (length the-store)))
-      (set! the-store (append the-store (list val)))
-      next-ref)))
+    (let* ((next-ref (vector-length the-store))
+           (new-vec (make-vector (+ next-ref 1))))
+      (let loop! ((index 0))
+        (if (= index next-ref)
+            (begin
+              (vector-set! new-vec index val)
+              (set! the-store new-vec)
+              next-ref)
+            (let ((val (vector-ref the-store index)))
+              (vector-set! new-vec index val)
+              (loop! (+ index 1))))))))
 
 ; deref : Ref → ExpVal
 (define deref
   (lambda (ref)
-    (list-ref the-store ref)))
+    (vector-ref the-store ref)))
 
 ; setref! : Ref × ExpVal → Unspecified
 ; usage: sets the-store to a state like the original, but with
 ; position ref containing val.
 (define setref!
   (lambda (ref val)
-    (set! the-store
-          (letrec
-              ((setref-inner
-                ; usage: returns a list like store1, except that
-                ; position ref1 contains val.
-                (lambda (store1 ref1)
-                  (cond
-                    ((null? store1)
-                     (eopl:error "report-invalid-reference ~s" ref the-store))
-                    ((zero? ref1)
-                     (cons val (cdr store1)))
-                    (else
-                     (cons
-                      (car store1)
-                      (setref-inner
-                       (cdr store1) (- ref1 1))))))))
-            (setref-inner the-store ref)))))
+    (vector-set! the-store ref val)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -219,6 +233,16 @@
    (exp2 expression?))
   (seq-exp
    (exps (list-of expression?)))
+  (nil-exp)
+  (car-exp
+   (pair expression?))
+  (cdr-exp
+   (pair expression?))
+  (cons-exp
+   (exp1 expression?)
+   (exp2 expression?))
+  (list-exp
+   (exps (list-of expression?)))
   )
 
 (define-datatype program program?
@@ -280,6 +304,24 @@
                      (if (null? rest)
                          last-val
                          (loop (cdr rest) (value-of (car rest) env))))))
+      (nil-exp ()
+               (nil-val))
+      (car-exp (pair-exp)
+               (let ((pair (value-of pair-exp env)))
+                 (expval->pair-val-fst pair)))
+      (cdr-exp (pair-exp)
+               (let ((pair (value-of pair-exp env)))
+                 (expval->pair-val-snd pair)))
+      (cons-exp (exp1 exp2)
+                (let ((val1 (value-of exp1 env)))
+                  (let ((val2 (value-of exp2 env)))
+                    (pair-val val1 val2))))
+      (list-exp (exps)
+                (let loop ((exps exps))
+                  (if (null? exps)
+                      (nil-val)
+                      (pair-val (value-of (car exps) env)
+                                (loop (cdr exps))))))
       )))
 
 
@@ -309,6 +351,11 @@
     (expression ("deref" "(" expression ")") deref-exp)
     (expression ("setref" "(" expression "," expression ")") setref-exp)
     (expression ("begin"  (separated-list expression ";") "end") seq-exp)
+    (expression ("nil") nil-exp)
+    (expression ("car" "(" expression ")") car-exp)
+    (expression ("cdr" "(" expression ")") cdr-exp)
+    (expression ("cons" "(" expression "," expression ")") cons-exp)
+    (expression ("list" "(" (arbno expression) ")") list-exp)
     ))
 
 (define scan&parse
@@ -336,20 +383,36 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;test
 (define str1
-  "let x = newref(22)
-   in let f = proc (z) let zz = newref(-(z,deref(x)))
-                       in deref(zz)
-      in -((f 66), (f 55))")
-(check-equal? (run str1) (num-val 11))
+  "list(nil)")
+(check-equal? (run str1) (pair-val (nil-val) (nil-val)))
+
 
 (define str2
-  "let g = let counter = newref(0)
-           in proc (dummy)
-                begin
-                  setref(counter, -(deref(counter), -1));
-                  deref(counter)
-                end
-  in let a = (g 11)
-     in let b = (g 11)
-        in -(a,b)")
-(check-equal? (run str2) (num-val -1))
+  "list(3 2 1 nil)")
+(check-equal? (run str2)
+              (pair-val
+               (num-val 3)
+               (pair-val (num-val 2)
+                          (pair-val (num-val 1)
+                                    (pair-val (nil-val)
+                                              (nil-val))))))
+
+
+(define str3
+  "list(3 2 1)")
+(check-equal? (run str3) (pair-val (num-val 3) (pair-val (num-val 2) (pair-val (num-val 1) (nil-val)))))
+
+
+(define str4
+  "car(list(3 2 1))")
+(check-equal? (run str4) (num-val 3))
+
+
+(define str5
+  "cdr(list(3 2 1))")
+(check-equal? (run str5) (pair-val (num-val 2) (pair-val (num-val 1) (nil-val))))
+
+
+(define str6
+  "cons(114, 514)")
+(check-equal? (run str6) (pair-val (num-val 114)  (num-val 514)))
