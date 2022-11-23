@@ -4,4 +4,4 @@
 4. exercise 3.25
 5. exercise 3.26
 6. exercise 3.40
-
+7. exercise 4.12
