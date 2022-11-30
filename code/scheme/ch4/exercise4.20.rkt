@@ -5,54 +5,54 @@
 ;;; Procedure data type
 ; procedure : Var × Exp × Env → Proc
 (define-datatype
- proc
- proc?
- (procedure (var identifier?)
-            (body expression?)
-            (saved-env environment?)))
+  proc
+  proc?
+  (procedure (var identifier?)
+             (body expression?)
+             (saved-env environment?)))
 ; apply-procedure : Proc × ExpVal → ExpVal
 (define apply-procedure
   (lambda (proc1 val)
     (cases proc
-           proc1
-           (procedure (var body saved-env)
-                      (value-of body
-                                (extend-env
-                                 var
-                                 (newref val)
-                                 saved-env))))))
+      proc1
+      (procedure (var body saved-env)
+                 (value-of body
+                           (extend-env
+                            var
+                            val
+                            saved-env))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; ExpVal data type
 (define-datatype expval
-                 expval?
-                 (num-val (value number?))
-                 (bool-val (boolean boolean?))
-                 (proc-val (proc proc?)))
+  expval?
+  (num-val (value number?))
+  (bool-val (boolean boolean?))
+  (proc-val (proc proc?)))
 
 (define expval->num
   (lambda (v)
     (cases
-     expval
-     v
-     (num-val (num) num)
-     (else (eopl:error 'expval->num "~s" v)))))
+        expval
+      v
+      (num-val (num) num)
+      (else (eopl:error 'expval->num "~s" v)))))
 
 (define expval->bool
   (lambda (v)
     (cases
-     expval
-     v
-     (bool-val (bool) bool)
-     (else (eopl:error 'expval->bool "~s" v)))))
+        expval
+      v
+      (bool-val (bool) bool)
+      (else (eopl:error 'expval->bool "~s" v)))))
 
 (define expval->proc
   (lambda (v)
     (cases
-     expval
-     v
-     (proc-val (proc) proc)
-     (else (eopl:error 'expval->proc "~s" v)))))
+        expval
+      v
+      (proc-val (proc) proc)
+      (else (eopl:error 'expval->proc "~s" v)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Store
@@ -113,19 +113,20 @@
                        (- ref1 1)))]))])
        (setref-inner the-store ref)))))
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
 (define-datatype
- environment
- environment?
- (empty-env)
- (extend-env (var identifier?)
-             (ref reference?)
-             (env environment?))
- (extend-env-rec (p-names (list-of identifier?))
-                 (b-vars (list-of identifier?))
-                 (bodys (list-of expression?))
-                 (env environment?)))
+  environment
+  environment?
+  (empty-env)
+  (extend-env (var identifier?)
+              (val (lambda (val)(or (expval? val) (reference? val))))
+              (env environment?))
+  (extend-env-rec (p-names (list-of identifier?))
+                  (b-vars (list-of identifier?))
+                  (bodys (list-of expression?))
+                  (env environment?)))
 
 (define location
   (lambda (search names)
@@ -138,27 +139,27 @@
 (define apply-env
   (lambda (env search-var)
     (cases
-     environment
-     env
-     (empty-env ()
-                (eopl:error 'apply-env
-                            "No binding for ~s"
-                            search-var))
-     (extend-env
-      (bvar ref saved-env)
-      (if (eqv? search-var bvar)
-          ref
-          (apply-env saved-env search-var)))
-     (extend-env-rec
-      (p-names b-vars p-bodies saved-env)
-      (let ([n (location search-var p-names)])
-        (if n
-            (newref (proc-val
-                     (procedure
-                      (list-ref b-vars n)
-                      (list-ref p-bodies n)
-                      env)))
-            (apply-env saved-env search-var)))))))
+        environment
+      env
+      (empty-env ()
+                 (eopl:error 'apply-env
+                             "No binding for ~s"
+                             search-var))
+      (extend-env
+       (var denval saved-env)
+       (if (eqv? search-var var)
+           denval
+           (apply-env saved-env search-var)))
+      (extend-env-rec
+       (p-names b-vars p-bodies saved-env)
+       (let ([n (location search-var p-names)])
+         (if n
+             (proc-val
+              (procedure
+               (list-ref b-vars n)
+               (list-ref p-bodies n)
+               env))
+             (apply-env saved-env search-var)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Expression data type && Program
@@ -167,30 +168,34 @@
     (and (symbol? exp) (not (eqv? exp 'lambda)))))
 
 (define-datatype
- expression
- expression?
- (const-exp (num number?))
- (if-exp (exp1 expression?)
-         (exp2 expression?)
-         (exp3 expression?))
- (zero?-exp (exp1 expression?))
- (var-exp (var identifier?))
- (diff-exp (exp1 expression?) (exp2 expression?))
- (let-exp (var identifier?)
-          (exp expression?)
-          (body expression?))
- (letrec-exp (p-names (list-of identifier?))
-             (b-vars (list-of identifier?))
-             (p-bodies (list-of expression?))
-             (letrec-body expression?))
- (proc-exp (var identifier?) (body expression?))
- (call-exp (rator expression?) (rand expression?))
- (assign-exp (var identifier?) (exp1 expression?))
- (seq-exp (exps (list-of expression?))))
+  expression
+  expression?
+  (const-exp (num number?))
+  (if-exp (exp1 expression?)
+          (exp2 expression?)
+          (exp3 expression?))
+  (zero?-exp (exp1 expression?))
+  (var-exp (var identifier?))
+  (diff-exp (exp1 expression?) (exp2 expression?))
+  (let-exp (var identifier?)
+           (exp1 expression?)
+           (body expression?))
+  (letmut-exp
+   (var identifier?)
+   (exp1 expression?)
+   (body expression?))
+  (letrec-exp (p-names (list-of identifier?))
+              (b-vars (list-of identifier?))
+              (p-bodies (list-of expression?))
+              (letrec-body expression?))
+  (proc-exp (var identifier?) (body expression?))
+  (call-exp (rator expression?) (rand expression?))
+  (assign-exp (var identifier?) (exp1 expression?))
+  (seq-exp (exps (list-of expression?))))
 
 (define-datatype program
-                 program?
-                 (a-program (exp1 expression?)))
+  program?
+  (a-program (exp1 expression?)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Interpreter
 
@@ -198,67 +203,78 @@
 (define value-of
   (lambda (exp env)
     (cases
-     expression
-     exp
-     (const-exp (num) (num-val num))
-     (var-exp (var) (deref (apply-env env var)))
-     (diff-exp (exp1 exp2)
-               (let ([val1 (value-of exp1 env)]
-                     [val2 (value-of exp2 env)])
-                 (let ([num1 (expval->num val1)]
-                       [num2 (expval->num val2)])
-                   (num-val (- num1 num2)))))
-     (if-exp (exp1 exp2 exp3)
-             (let ([val1 (value-of exp1 env)])
-               (if (expval->bool val1)
-                   (value-of exp2 env)
-                   (value-of exp3 env))))
-     (zero?-exp (exp1)
-                (let ([val1 (value-of exp1 env)])
-                  (let ([num1 (expval->num val1)])
-                    (if (zero? num1)
-                        (bool-val #t)
-                        (bool-val #f)))))
-     (let-exp
-      (var exp1 body)
-      (let ([val1 (value-of exp1 env)])
-        (value-of
-         body
-         (extend-env var (newref val1) env))))
-     (letrec-exp (proc-names bound-vars
+        expression
+      exp
+      (const-exp (num) (num-val num))
+      (var-exp (var)
+               (let ((denval  (apply-env env var)))
+                 (if (reference? denval)
+                     (deref denval)
+                     denval)))
+      (diff-exp (exp1 exp2)
+                (let ([val1 (value-of exp1 env)]
+                      [val2 (value-of exp2 env)])
+                  (let ([num1 (expval->num val1)]
+                        [num2 (expval->num val2)])
+                    (num-val (- num1 num2)))))
+      (if-exp (exp1 exp2 exp3)
+              (let ([val1 (value-of exp1 env)])
+                (if (expval->bool val1)
+                    (value-of exp2 env)
+                    (value-of exp3 env))))
+      (zero?-exp (exp1)
+                 (let ([val1 (value-of exp1 env)])
+                   (let ([num1 (expval->num val1)])
+                     (if (zero? num1)
+                         (bool-val #t)
+                         (bool-val #f)))))
+      (let-exp
+       (var exp1 body)
+       (let ([val1 (value-of exp1 env)])
+         (value-of
+          body
+          (extend-env var val1 env))))
+      (letmut-exp
+       (var exp1 body)
+       (let ([val1 (value-of exp1 env)])
+         (value-of body (extend-env var (newref val1) env))))
+      (letrec-exp (proc-names bound-vars
+                              proc-bodies
+                              letrec-body)
+                  (value-of letrec-body
+                            (extend-env-rec
+                             proc-names
+                             bound-vars
                              proc-bodies
-                             letrec-body)
-                 (value-of letrec-body
-                           (extend-env-rec
-                            proc-names
-                            bound-vars
-                            proc-bodies
-                            env)))
-     (proc-exp
-      (var body)
-      (proc-val (procedure var body env)))
-     (call-exp (rator rand)
-               (let ([proc (expval->proc
-                            (value-of rator env))]
-                     [arg (value-of rand env)])
-                 (apply-procedure proc arg)))
-     (assign-exp (var exp1)
-                 (begin
-                   (setref! (apply-env env var)
-                            (value-of exp1 env))
-                   (num-val 27)))
-     (seq-exp
-      (exps)
-      (if (null? exps)
-          (eopl:error 'value-of " empty seq-exp")
-          (let loop ([rest (cdr exps)]
-                     [last-val
-                      (value-of (car exps) env)])
-            (if (null? rest)
-                last-val
-                (loop (cdr rest)
-                      (value-of (car rest)
-                                env)))))))))
+                             env)))
+      (proc-exp
+       (var body)
+       (proc-val (procedure var body env)))
+      (call-exp (rator rand)
+                (let ([proc (expval->proc
+                             (value-of rator env))]
+                      [arg (value-of rand env)])
+                  (apply-procedure proc arg)))
+      (assign-exp (var exp1)
+                  (let ((denval (apply-env env var)))
+                    (if (not (reference? denval))
+                        (eopl:error 'assign-exp "Variable is immutable: ~s" var)
+                        (begin
+                          (setref! denval
+                                   (value-of exp1 env))
+                          (num-val 27)))))
+      (seq-exp
+       (exps)
+       (if (null? exps)
+           (eopl:error 'value-of " empty seq-exp")
+           (let loop ([rest (cdr exps)]
+                      [last-val
+                       (value-of (car exps) env)])
+             (if (null? rest)
+                 last-val
+                 (loop (cdr rest)
+                       (value-of (car rest)
+                                 env)))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;run
@@ -302,6 +318,12 @@
                           "in"
                           expression)
                 letrec-exp)
+    (expression ("letmutable" identifier
+                              "="
+                              expression
+                              "in"
+                              expression)
+                letmut-exp)
     (expression
      ("proc" "(" identifier ")" expression)
      proc-exp)
@@ -321,9 +343,9 @@
 (define init-env
   (lambda ()
     (extend-env 'true
-                (newref (bool-val #t))
+                (bool-val #t)
                 (extend-env 'false
-                            (newref (bool-val #f))
+                            (bool-val #f)
                             (empty-env)))))
 
 ; value-of-program : Program → ExpVal
@@ -331,10 +353,10 @@
   (lambda (pgm)
     (initialize-store!)
     (cases program
-           pgm
-           (a-program
-            (exp1)
-            (value-of exp1 (init-env))))))
+      pgm
+      (a-program
+       (exp1)
+       (value-of exp1 (init-env))))))
 
 (define run
   (lambda (str)
@@ -343,7 +365,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;test
 (define str1
-  "let x = 0
+  "letmutable x = 0
    in letrec even(dummy) = if zero?(x)
                               then true
                               else begin
@@ -363,7 +385,7 @@
 (check-equal? (run str1) (bool-val #t))
 
 (define str2
-  "let g = let counter = 0
+  "let g = letmutable counter = 0
            in proc (dummy)
                 begin
                   set counter = -(counter, -1);
@@ -384,10 +406,18 @@
 (check-equal? (run str3) (bool-val #f))
 
 (define str4
+  "letmutable x = false
+   in begin
+        set x = 32;
+        x
+      end")
+(check-equal? (run str4) (num-val 32))
+
+(define str5
   "let f = proc (x) proc (y)
             begin
               set x = -(x,-1);
               -(x,y)
             end
   in ((f 44) 33)")
-(check-equal? (run str4) (num-val 12))
+;(run str5) ;error

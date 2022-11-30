@@ -145,9 +145,9 @@
                             "No binding for ~s"
                             search-var))
      (extend-env
-      (bvar ref saved-env)
+      (bvar bval saved-env)
       (if (eqv? search-var bvar)
-          ref
+          bval
           (apply-env saved-env search-var)))
      (extend-env-rec
       (p-names b-vars p-bodies saved-env)
@@ -343,51 +343,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;test
 (define str1
-  "let x = 0
-   in letrec even(dummy) = if zero?(x)
-                              then true
-                              else begin
-                                    set x = -(x, 1);
-                                    (odd 888)
-                                   end
-             odd(dummy) = if zero?(x)
-                             then false
-                             else begin
-                                 set x = -(x, 1);
-                                 (even 888)
-                             end
-      in begin
-          set x = 13;
-          (odd -888)
-         end")
-(check-equal? (run str1) (bool-val #t))
-
-(define str2
-  "let g = let counter = 0
-           in proc (dummy)
-                begin
-                  set counter = -(counter, -1);
-                  counter
-                end
-  in let a = (g 11)
-     in let b = (g 11)
-        in -(a,b)")
-(check-equal? (run str2) (num-val -1))
-
-(define str3
-  "
-  letrec
-    even(x) = if zero?(x) then true else (odd -(x,1))
-    odd(x) = if zero?(x) then false else (even -(x,1))
-  in (odd 14)
-")
-(check-equal? (run str3) (bool-val #f))
-
-(define str4
-  "let f = proc (x) proc (y)
-            begin
-              set x = -(x,-1);
-              -(x,y)
-            end
-  in ((f 44) 33)")
-(check-equal? (run str4) (num-val 12))
+  "let times4 = 0
+   in begin
+       set times4 = proc (x)
+                      if zero?(x)
+                      then 0
+                      else -((times4 -(x,1)), -4);
+       (times4 3)
+   end")
+(check-equal? (run str1) (num-val 12))
