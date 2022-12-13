@@ -391,3 +391,10 @@
             end
   in ((f 44) 33)")
 (check-equal? (run str4) (num-val 12))
+
+(define str5
+  "let p = proc (x) set x = 4
+in let a = 3
+in begin (p a); a end")
+(check-equal? (run str5) (num-val 3))
+
