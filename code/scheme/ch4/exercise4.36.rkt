@@ -11,7 +11,7 @@
              (body expression?)
              (saved-env environment?)))
 
-; apply-procedure : Proc × Ref → ExpVal
+; apply-procedure : Proc × ExpVal → ExpVal
 (define apply-procedure
   (lambda (proc1 val)
     (cases proc proc1
@@ -19,12 +19,38 @@
                  (value-of body
                            (extend-env var val saved-env))))))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Array
+(define array?
+  (lambda (v)
+    (reference? v)))
+
+(define make-array
+  (lambda (len init-val)
+    (let ((head (newref init-val)))
+      (let loop ((cnt (- len 1)))
+        (if (= cnt 0)
+            head
+            (begin
+              (newref init-val)
+              (loop (- cnt 1))))))))
+
+(define array-ref
+  (lambda (arr index)
+    (+ arr index)))
+
+(define array-set
+  (lambda (arr index val)
+    (setref! (+ arr index) val)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; ExpVal data type
 (define-datatype expval
   expval?
   (num-val (value number?))
   (bool-val (boolean boolean?))
+  (array-val (arr array?))
   (proc-val (proc proc?)))
 
 (define expval->num
@@ -51,6 +77,12 @@
       (proc-val (proc) proc)
       (else (eopl:error 'expval->proc "~s" v)))))
 
+
+(define expval->array
+  (lambda (v)
+    (cases expval v
+      (array-val (val) val)
+      (else (eopl:error 'expval->array "~s" v)))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Store
 ; empty-store : () → Sto
@@ -183,7 +215,11 @@
   (proc-exp (var identifier?) (body expression?))
   (call-exp (rator expression?) (rand expression?))
   (assign-exp (var identifier?) (exp1 expression?))
-  (seq-exp (exps (list-of expression?))))
+  (seq-exp (exps (list-of expression?)))
+  (newarr-exp (len expression?) (init-val expression?))
+  (arrref-exp (arr expression?) (index expression?))
+  (arrset-exp (arr expression?) (index expression?) (val expression?))
+  )
 
 (define-datatype program
   program?
@@ -239,7 +275,17 @@
     (expression
      ("begin" (separated-list expression ";")
               "end")
-     seq-exp)))
+     seq-exp)
+    (expression
+     ("newarray" "(" expression "," expression ")")
+     newarr-exp)
+    (expression
+     ("arrayref" "(" expression "," expression ")")
+     arrref-exp)
+    (expression
+     ("arrayset" "(" expression "," expression "," expression ")")
+     arrset-exp)
+    ))
 
 (define scan&parse
   (sllgen:make-string-parser the-lexical-spec
@@ -251,6 +297,10 @@
   (lambda (exp env)
     (cases expression exp
       (var-exp (var) (apply-env env var))
+      (arrref-exp (arr-exp index-exp)
+                  (let ([arr (expval->array (value-of arr-exp env))]
+                        [index (expval->num (value-of index-exp env))])
+                    (array-ref arr index)))
       (else
        (newref (value-of exp env))))))
 
@@ -317,7 +367,23 @@
                  last-val
                  (loop (cdr rest)
                        (value-of (car rest)
-                                 env)))))))))
+                                 env))))))
+      (newarr-exp (len-exp init-val-exp)
+                  (let ((len (expval->num (value-of len-exp env)))
+                        (init-val (value-of init-val-exp env)))
+                    (array-val (make-array len init-val))))
+      (arrref-exp (arr-exp index-exp)
+                  (let ((arr (expval->array (value-of arr-exp env)))
+                        (index (expval->num (value-of index-exp env))))
+                    (deref(array-ref arr index))))
+      (arrset-exp (arr-exp index-exp val-exp)
+                  (let ((arr (expval->array (value-of arr-exp env)))
+                        (index (expval->num (value-of index-exp env)))
+                        (val (value-of val-exp env)))
+                    (begin
+                      (array-set arr index val)
+                      (num-val 73))))
+      )))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;run
@@ -384,9 +450,29 @@
    in ((p b) b)")
 (check-equal? (run str3) (num-val 4))
 
-(define str6
-  "let a = 5
-   in let f = proc (x) begin set x = 77; set a = 99; 55 end
-      in begin (f a); a end")
-(check-equal? (run str6) (num-val 99))
+(define str4
+  "let a = newarray(2,-99)
+    in let p = proc (x)
+                 let v = arrayref(x,1)
+                 in arrayset(x,1,-(v,-1))
+        in begin arrayset(a,1,0); (p a); (p a); arrayref(a,1) end")
+(check-equal? (run str4) (num-val 2))
 
+(define str5
+  "let swap = proc (x) proc (y)
+                let temp = x
+                 in begin
+                   set x = y;
+                   set y = temp
+                 end
+   in let arr = newarray(2, 0)
+      in begin arrayset(arr, 1, -1);
+               arrayset(arr, 0, 1);
+               ((swap arrayref(arr, 0)) arrayref(arr, 1));
+               -(arrayref(arr, 0), arrayref(arr, 1))
+        end
+   ")
+(check-equal? (run str5) (num-val -2))
+
+; ((swap (arrayref a (arrayref a i))) (arrayref a j))
+; => swap a of index (arrayref a i) and j

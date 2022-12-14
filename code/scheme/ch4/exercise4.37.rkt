@@ -11,13 +11,16 @@
              (body expression?)
              (saved-env environment?)))
 
-; apply-procedure : Proc × Ref → ExpVal
+; apply-procedure : Proc × ExpVal → ExpVal
 (define apply-procedure
   (lambda (proc1 val)
-    (cases proc proc1
-      (procedure (var body saved-env)
-                 (value-of body
-                           (extend-env var val saved-env))))))
+    (cases proc
+           proc1
+           (procedure (var body saved-env)
+                      (let ((new-env (extend-env var (newref val) saved-env)))
+                      (list (value-of body new-env) (deref (apply-env new-env var))))))))
+
+                      
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; ExpVal data type
@@ -246,13 +249,19 @@
                              the-grammar-spec))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Interpreter
-; value-of-operand : Exp × Env → Ref
 (define value-of-operand
   (lambda (exp env)
     (cases expression exp
-      (var-exp (var) (apply-env env var))
+      (var-exp (var) (deref (apply-env env var)))
       (else
-       (newref (value-of exp env))))))
+       (eopl:error 'value-of-operand)))))
+
+(define set-operand
+  (lambda (rand value env)
+    (cases expression rand
+      (var-exp (var) (setref! (apply-env env var) value))
+      (else
+       (eopl:error 'set-operand)))))
 
 ; value-of : Exp × Env → ExpVal
 (define value-of
@@ -299,8 +308,10 @@
        (proc-val (procedure var body env)))
       (call-exp (rator rand)
                 (let ((proc (expval->proc (value-of rator env)))
-                      (arg (value-of-operand rand env)))
-                  (apply-procedure proc arg)))
+                      (arg (value-of-operand rand env))) ; must be an variable
+                  (let ((res (apply-procedure proc arg)))
+                    (set-operand rand (cadr res) env)
+                    (car res))))
       (assign-exp (var exp1)
                   (begin
                     (setref! (apply-env env var)
@@ -372,7 +383,7 @@
            ((swap a) b);
            -(a,b)
          end")
-(check-equal? (run str2) (num-val 11))
+(check-equal? (run str2) (num-val 0))
 
 (define str3
   "let b = 3
@@ -382,11 +393,25 @@
                   y
                 end
    in ((p b) b)")
-(check-equal? (run str3) (num-val 4))
+(check-equal? (run str3) (num-val 3))
+
+(define str4
+  "let f = proc (x) begin set x = 8; -(x,1) end
+   in let a = 5
+      in (f a)")
+(check-equal? (run str4) (num-val 7))
+
+(define str5
+  "let f = proc (x) begin set x = 8; -(x,1) end
+   in let a = 5
+      in begin (f a); a end")
+(check-equal? (run str5) (num-val 8))
 
 (define str6
   "let a = 5
    in let f = proc (x) begin set x = 77; set a = 99; 55 end
       in begin (f a); a end")
-(check-equal? (run str6) (num-val 99))
+(check-equal? (run str6) (num-val 77)) ;;; call-by-reference => 99
+
+      
 

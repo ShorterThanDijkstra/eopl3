@@ -11,7 +11,7 @@
              (body expression?)
              (saved-env environment?)))
 
-; apply-procedure : Proc × Ref → ExpVal
+; apply-procedure : Proc × ExpVal → ExpVal
 (define apply-procedure
   (lambda (proc1 val)
     (cases proc proc1
@@ -25,7 +25,7 @@
   expval?
   (num-val (value number?))
   (bool-val (boolean boolean?))
-  (proc-val (proc proc?)))
+  (proc-val (proc proc?) (call-by-ref? boolean?)))
 
 (define expval->num
   (lambda (v)
@@ -48,9 +48,16 @@
     (cases
         expval
       v
-      (proc-val (proc) proc)
+      (proc-val (proc _) proc)
       (else (eopl:error 'expval->proc "~s" v)))))
 
+(define call-by-ref-proc?
+  (lambda (v)
+    (cases
+        expval
+      v
+      (proc-val (_ call-by-ref?) call-by-ref?)
+      (else (eopl:error 'expval->proc "~s" v)))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Store
 ; empty-store : () → Sto
@@ -180,7 +187,8 @@
               (b-vars (list-of identifier?))
               (p-bodies (list-of expression?))
               (letrec-body expression?))
-  (proc-exp (var identifier?) (body expression?))
+  (proc-ref-exp (var identifier?) (body expression?))
+  (proc-val-exp (var identifier?) (body expression?))
   (call-exp (rator expression?) (rand expression?))
   (assign-exp (var identifier?) (exp1 expression?))
   (seq-exp (exps (list-of expression?))))
@@ -230,8 +238,11 @@
                           expression)
                 letrec-exp)
     (expression
-     ("proc" "(" identifier ")" expression)
-     proc-exp)
+     ("proc-ref" "(" identifier ")" expression)
+     proc-ref-exp)
+    (expression
+     ("proc-val" "(" identifier ")" expression)
+     proc-val-exp)
     (expression ("(" expression expression ")")
                 call-exp)
     (expression ("set" identifier "=" expression)
@@ -294,13 +305,19 @@
                              bound-vars
                              proc-bodies
                              env)))
-      (proc-exp
+      (proc-ref-exp
        (var body)
-       (proc-val (procedure var body env)))
+       (proc-val (procedure var body env) #t))
+        (proc-val-exp
+       (var body)
+       (proc-val (procedure var body env) #f))
       (call-exp (rator rand)
-                (let ((proc (expval->proc (value-of rator env)))
-                      (arg (value-of-operand rand env)))
-                  (apply-procedure proc arg)))
+                (let* ((rantor-val  (value-of rator env))
+                      (ref? (call-by-ref-proc? rantor-val))
+                      (proc (expval->proc rantor-val)))
+                  (if ref?
+                      (apply-procedure proc (value-of-operand rand env))
+                      (apply-procedure proc (newref (value-of rand env))))))
       (assign-exp (var exp1)
                   (begin
                     (setref! (apply-env env var)
@@ -347,20 +364,33 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;test
 (define str0
-  "let p = proc (x) set x = 4
+  "let p = proc-ref (x) set x = 4
     in let a = 3
        in begin (p a); a end")
 (check-equal? (run str0) (num-val 4))
 
+(define str0_
+  "let p = proc-val (x) set x = 4
+    in let a = 3
+       in begin (p a); a end")
+(check-equal? (run str0_) (num-val 3))
+
 (define str1
-  "let f = proc (x) set x = 44
-   in let g = proc (y) (f y)
+  "let f = proc-ref (x) set x = 44
+   in let g = proc-ref (y) (f y)
       in let z = 55
          in begin (g z); z end")
 (check-equal? (run str1) (num-val 44))
 
+(define str1_
+  "let f = proc-val (x) set x = 44
+   in let g = proc-val (y) (f y)
+      in let z = 55
+         in begin (g z); z end")
+(check-equal? (run str1_) (num-val 55))
+
 (define str2
-  "let swap = proc (x) proc (y)
+  "let swap = proc-ref (x) proc-ref (y)
                 let temp = x
                  in begin
                    set x = y;
@@ -374,9 +404,24 @@
          end")
 (check-equal? (run str2) (num-val 11))
 
+(define str2_
+  "let swap = proc-val (x) proc-val (y)
+                let temp = x
+                 in begin
+                   set x = y;
+                   set y = temp
+                 end
+   in let a = 33
+      in let b = 44
+         in begin
+           ((swap a) b);
+           -(a,b)
+         end")
+(check-equal? (run str2_) (num-val -11))
+
 (define str3
   "let b = 3
-   in let p = proc (x) proc(y)
+   in let p = proc-ref (x) proc-ref(y)
                 begin
                   set x = 4;
                   y
@@ -384,9 +429,13 @@
    in ((p b) b)")
 (check-equal? (run str3) (num-val 4))
 
-(define str6
-  "let a = 5
-   in let f = proc (x) begin set x = 77; set a = 99; 55 end
-      in begin (f a); a end")
-(check-equal? (run str6) (num-val 99))
+(define str3_
+  "let b = 3
+   in let p = proc-val (x) proc-val(y)
+                begin
+                  set x = 4;
+                  y
+                end
+   in ((p b) b)")
+(check-equal? (run str3_) (num-val 3))
 

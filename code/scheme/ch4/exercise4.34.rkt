@@ -11,7 +11,7 @@
              (body expression?)
              (saved-env environment?)))
 
-; apply-procedure : Proc × Ref → ExpVal
+; apply-procedure : Proc × ExpVal → ExpVal
 (define apply-procedure
   (lambda (proc1 val)
     (cases proc proc1
@@ -176,6 +176,9 @@
   (let-exp (var identifier?)
            (exp expression?)
            (body expression?))
+  (letref-exp (var identifier?)
+               (exp expression?)
+               (body expression?))
   (letrec-exp (p-names (list-of identifier?))
               (b-vars (list-of identifier?))
               (p-bodies (list-of expression?))
@@ -220,6 +223,12 @@
                        "in"
                        expression)
                 let-exp)
+    (expression ("letref" identifier
+                          "="
+                           expression
+                          "in"
+                       expression)
+                letref-exp)
     (expression ("letrec" (arbno identifier
                                  "("
                                  identifier
@@ -285,6 +294,12 @@
          (value-of
           body
           (extend-env var (newref val1) env))))
+      (letref-exp
+       (var exp1 body)
+       (let ([val1 (value-of-operand exp1 env)])
+         (value-of
+          body
+          (extend-env var val1 env))))
       (letrec-exp (proc-names bound-vars
                               proc-bodies
                               letrec-body)
@@ -384,9 +399,11 @@
    in ((p b) b)")
 (check-equal? (run str3) (num-val 4))
 
-(define str6
-  "let a = 5
-   in let f = proc (x) begin set x = 77; set a = 99; 55 end
-      in begin (f a); a end")
-(check-equal? (run str6) (num-val 99))
-
+(define str4
+  "let b = 3
+   in let p = b
+      in begin
+        set p = 4;
+        b
+      end")
+(check-equal? (run str3) (num-val 4))
