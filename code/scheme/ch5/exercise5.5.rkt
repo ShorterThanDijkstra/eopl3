@@ -1,0 +1,490 @@
+#lang eopl
+(require rackunit)
+(require racket/trace)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Procedure data type
+; procedure : Var × Exp × Env → Proc
+(define-datatype proc proc?
+  (procedure
+   (var identifier?)
+   (body expression?)
+   (saved-env environment?)))
+; apply-procedure : Proc × ExpVal → ExpVal
+; apply-procedure/k : Proc × ExpVal × Cont → FinalAnswer
+(define apply-procedure/k
+  (lambda (proc1 val cont)
+    (cases proc proc1
+      (procedure (var body saved-env)
+                 (value-of/k body
+                             (extend-env var val saved-env)
+                             cont)))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; ExpVal data type
+(define-datatype expval
+  expval?
+  (num-val (value number?))
+  (bool-val (boolean boolean?))
+  (proc-val (proc proc?))
+  (pair-val (fst expval?)
+            (snd expval?))
+  (nil-val)
+  )
+
+(define expval->num
+  (lambda (v)
+    (cases expval
+      v
+      (num-val (num) num)
+      (else (eopl:error 'expval->num "~s" v)))))
+
+(define expval->bool
+  (lambda (v)
+    (cases expval
+      v
+      (bool-val (bool) bool)
+      (else (eopl:error 'expval->bool "~s" v)))))
+
+(define expval->proc
+  (lambda (v)
+    (cases expval
+      v
+      (proc-val (proc) proc)
+      (else (eopl:error 'expval->proc "~s" v)))))
+
+(define expval->pair-fst
+  (lambda (v)
+    (cases expval v
+      	(pair-val (fst snd) fst)
+      	(else (eopl:error 'expval->pair-fst)))))
+
+(define expval->pair-snd
+  (lambda (v)
+    (cases expval v
+      	(pair-val (fst snd) snd)
+      	(else (eopl:error 'expval->pair-snd)))))
+
+(define expval->nil
+  (lambda (v)
+    (cases expval v
+      	(nil-val () 'nil)
+      	(else (eopl:error 'expval->nil)))))
+
+(define nil?
+  (lambda (v)
+    (cases expval v
+      	(nil-val () #t)
+      	(else #f))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Env
+(define-datatype environment environment?
+  (empty-env)
+  (extend-env
+   (var identifier?)
+   (val expval?)
+   (env environment?))
+  (extend-env-rec
+   (p-name identifier?)
+   (b-var identifier?)
+   (body expression?)
+   (env environment?)))
+
+(define apply-env
+  (lambda (env search-var)
+    (cases environment env
+      (empty-env ()
+                 (eopl:error 'apply-env))
+      (extend-env (saved-var saved-val saved-env)
+                  (if (eqv? saved-var search-var)
+                      saved-val
+                      (apply-env saved-env search-var)))
+      (extend-env-rec (p-name b-var p-body saved-env)
+                      (if (eqv? search-var p-name)
+                          (proc-val (procedure b-var p-body env))
+                          (apply-env saved-env search-var))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Expression && Parsing
+
+(define-datatype program program?
+  (a-program (expr expression?)))
+
+(define identifier?
+  (lambda (exp)
+    (and (symbol? exp)
+         (not (eqv? exp 'lambda)))))
+
+(define-datatype expression expression?
+  (const-exp
+   (num number?))
+  (if-exp
+   (exp1 expression?)
+   (exp2 expression?)
+   (exp3 expression?))
+  (zero?-exp
+   (exp1 expression?))
+  (var-exp
+   (var identifier?))
+  (diff-exp
+   (exp1 expression?)
+   (exp2 expression?))
+  (let-exp
+   (var  identifier?)
+   (exp  expression?)
+   (body expression?))
+  (let2-exp
+   (var1  identifier?)
+   (exp1  expression?)
+   (var2  identifier?)
+   (exp2  expression?)
+   (body expression?))
+  (let3-exp
+   (var1  identifier?)
+   (exp1  expression?)
+   (var2  identifier?)
+   (exp2  expression?)
+   (var3  identifier?)
+   (exp3  expression?)
+   (body expression?))
+  (letrec-exp
+   (p-name identifier?)
+   (b-var identifier?)
+   (p-body expression?)
+   (letrec-body expression?))
+  (proc-exp
+   (var identifier?)
+   (body expression?))
+  (call-exp
+   (rator expression?)
+   (rand expression?))
+  (cons-exp (fst-exp expression?) (snd-exp expression?))
+  (car-exp (pair-exp expression?))
+  (cdr-exp (pair-exp expression?))
+  (null?-exp (exp expression?))
+  (nil-exp)
+  )
+
+(define the-lexical-spec
+  '((whitespace (whitespace) skip)
+    (comment ("%" (arbno (not #\newline))) skip)
+    (identifier
+     (letter (arbno (or letter digit "_" "-" "?")))
+     symbol)
+    (number (digit (arbno digit)) number)
+    (number ("-" digit (arbno digit)) number)
+    ))
+
+(define the-grammar-spec
+  '((program    (expression) a-program)
+    (expression (number) const-exp)
+    (expression (identifier) var-exp)
+    (expression ("-" "(" expression "," expression ")") diff-exp)
+    (expression ("zero?" "(" expression ")") zero?-exp)
+    (expression ("if" expression "then" expression "else" expression) if-exp)
+    (expression ("let" identifier "=" expression "in" expression) let-exp)
+    (expression ("let2" identifier "=" expression
+                        identifier "=" expression
+                        "in" expression) let2-exp)
+    (expression ("let3" identifier "=" expression
+                        identifier "=" expression
+                        identifier "=" expression
+                        "in" expression) let3-exp)
+    (expression ("cons" "(" expression "," expression ")") cons-exp)
+    (expression ("car"  "(" expression ")" ) car-exp)
+    (expression ("cdr"  "(" expression ")" ) cdr-exp)
+    (expression ("null?"  "(" expression ")" ) null?-exp)
+    (expression ("emptylist") nil-exp)
+    (expression ("letrec" identifier "(" identifier ")" "=" expression "in" expression) letrec-exp)
+    (expression ("proc" "(" identifier ")" expression) proc-exp)
+    (expression ("(" expression expression ")") call-exp)
+    ))
+
+(define scan&parse
+  (sllgen:make-string-parser the-lexical-spec the-grammar-spec))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;Continuation
+(define-datatype continuation continuation?
+  (end-cont)
+  (zero1-cont
+   (cont continuation?))
+  (let-exp-cont
+   (var identifier?)
+   (body expression?)
+   (env environment?)
+   (cont continuation?))
+  (let2-exp1-cont
+   (var1 identifier?)
+   (var2 identifier?)
+   ( exp2 expression?)
+   (body expression?)
+   (env environment?)
+   (cont continuation?))
+  (let2-exp2-cont
+   (var2 identifier?)
+   (body expression?)
+   (env environment?)
+   (cont continuation?))
+  (let3-exp1-cont
+   (var1 identifier?)
+   (var2 identifier?)
+   (var3 identifier?)
+   (exp2 expression?)
+   (exp3 expression?)
+   (body expression?)
+   (env environment?)
+   (cont continuation?))
+  (let3-exp2-cont
+   (var2 identifier?)
+   (var3 identifier?)
+   (exp3 expression?)
+   (body expression?)
+   (env environment?)
+   (cont continuation?))
+  (let3-exp3-cont
+   (var3 identifier?)
+   (body expression?)
+   (env environment?)
+   (cont continuation?))
+  (if-test-cont
+   (exp2 expression?)
+   (exp3 expression?)
+   (env environment?)
+   (cont continuation?))
+  (diff1-cont
+   (exp2 expression?)
+   (env environment?)
+   (cont continuation?))
+  (diff2-cont
+   (val1 expval?)
+   (cont continuation?))
+  (rator-cont
+   (rand expression?)
+   (env environment?)
+   (cont continuation?))
+  (rand-cont
+   (val1 expval?)
+   (cont continuation?))
+  (cons-fst-cont
+   (snd-exp expression?)
+   (env environment?)
+   (cont continuation?))
+  (cons-snd-cont
+   (val1 expval?)
+   (cont continuation?))
+  (car-cont
+   (cont continuation?))
+  (cdr-cont
+   (cont continuation?))
+  (null?-cont (cont continuation?))
+  )
+
+; apply-cont : Cont × ExpVal → FinalAnswer
+(define apply-cont
+  (lambda (cont val)
+    (cases continuation cont
+      (end-cont ()
+                (begin
+                  (eopl:printf "End of computation:~s.~%" val)
+                  val))
+      (zero1-cont (saved-cont)
+                  (apply-cont saved-cont
+                              (bool-val
+                               (zero? (expval->num val)))))
+      (let-exp-cont (var body saved-env saved-cont)
+                    (value-of/k body
+                                (extend-env var val saved-env) saved-cont))
+      (let2-exp1-cont (var1 var2 exp2 body saved-env cont)
+                      (let ((new-env (extend-env var1 val saved-env)))
+                        (value-of/k exp2
+                                    new-env
+                                    (let2-exp2-cont var2 body new-env cont))))
+      (let2-exp2-cont (var2 body saved-env cont)
+                      (value-of/k body
+                                  (extend-env var2 val saved-env)
+                                  cont))
+      (let3-exp1-cont
+       (var1 var2 var3 exp2 exp3 body env cont)
+       (let ((new-env (extend-env var1 val env)))
+         (value-of/k exp2 new-env (let3-exp2-cont var2 var3 exp3 body new-env cont))))
+      (let3-exp2-cont (var2 var3 exp3 body env cont)
+                      (let ((new-env (extend-env var2 val env)))
+                        (value-of/k exp3 new-env (let3-exp3-cont var3 body new-env cont))))
+      (let3-exp3-cont (var3 body env cont)
+                      (value-of/k body (extend-env var3 val env) cont))
+      (if-test-cont (exp2 exp3 saved-env saved-cont)
+                    (if (expval->bool val)
+                        (value-of/k exp2 saved-env saved-cont)
+                        (value-of/k exp3 saved-env saved-cont)))
+      (diff1-cont (exp2 env cont)
+                  (value-of/k exp2 env
+                              (diff2-cont val cont)))
+      (diff2-cont (val1 cont)
+                  (let ((num1 (expval->num val1))
+                        (num2 (expval->num val)))
+                    (apply-cont cont
+                                (num-val (- num1 num2)))))
+      (rator-cont (rand env cont)
+                  (value-of/k rand env
+                              (rand-cont val cont)))
+      (rand-cont (val1 cont)
+                 (let ((proc1 (expval->proc val1)))
+                   (apply-procedure/k proc1 val cont)))
+      (cons-fst-cont (snd-exp env cont)
+                     (value-of/k snd-exp env (cons-snd-cont val cont)))
+      (cons-snd-cont (val1 cont)
+                     (apply-cont cont (pair-val val1 val)))
+      (car-cont (cont)
+                (let ((fst (expval->pair-fst val)))
+                  (apply-cont cont fst)))
+      (cdr-cont (cont)
+                (let ((fst (expval->pair-snd val)))
+                  (apply-cont cont fst)))
+      (null?-cont (cont)
+                  (apply-cont cont (bool-val (nil? val))))
+      
+      )))
+
+; ; Cont = ExpVal → FinalAnswer
+; ; end-cont : () → Cont
+; (define end-cont
+;   (lambda ()
+;     (lambda (val)
+;       (begin
+;         (eopl:printf "End of computation.~%")
+;         val))))
+; ; zero1-cont : Cont → Cont
+; (define zero1-cont
+;   (lambda (cont)
+;     (lambda (val)
+;       (apply-cont cont
+;                   (bool-val
+;                    (zero? (expval->num val)))))))
+; ; let-exp-cont : Var × Exp × Env × Cont → Cont
+; (define let-exp-cont
+;   (lambda (var body env cont)
+;     (lambda (val)
+;       (value-of/k body (extend-env var val env) cont))))
+; ; if-test-cont : Exp × Exp × Env × Cont → Cont
+; (define if-test-cont
+;   (lambda (exp2 exp3 env cont)
+;     (lambda (val)
+;       (if (expval->bool val)
+;           (value-of/k exp2 env cont)
+;           (value-of/k exp3 env cont)))))
+; ; apply-cont : Cont × ExpVal → FinalAnswer
+; (define apply-cont
+;   (lambda (cont v)
+;     (cont v)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Interpreter
+(define init-env
+  (lambda ()
+    (extend-env 'true (bool-val #t)
+                (extend-env 'false (bool-val #f)
+                            (empty-env)))))
+
+; value-of-program : Program → FinalAnswer
+(define value-of-program
+  (lambda (pgm)
+    (cases program pgm
+      (a-program (exp1)
+                 (value-of/k exp1 (init-env) (end-cont))))))
+; value-of/k : Exp × Env × Cont → FinalAnswer
+(define value-of/k
+  (lambda (exp env cont)
+    (cases expression exp
+      (const-exp (num) (apply-cont cont (num-val num)))
+      (var-exp (var) (apply-cont cont (apply-env env var)))
+      (proc-exp (var body)
+                (apply-cont cont
+                            (proc-val
+                             (procedure var body env))))
+      (letrec-exp (p-name b-var p-body letrec-body)
+                  (value-of/k letrec-body
+                              (extend-env-rec p-name b-var p-body env)
+                              cont))
+      (zero?-exp (exp1)
+                 (value-of/k exp1 env
+                             (zero1-cont cont)))
+      (if-exp (exp1 exp2 exp3)
+              (value-of/k exp1 env
+                          (if-test-cont exp2 exp3 env cont)))
+      (let-exp (var exp1 body)
+               (value-of/k exp1 env
+                           (let-exp-cont var body env cont)))
+      (let2-exp (var1 exp1 var2 exp2 body)
+                (value-of/k exp1 env
+                            (let2-exp1-cont var1 var2 exp2 body env cont)))
+      (let3-exp (var1 exp1 var2 exp2 var3 exp3 body)
+                (value-of/k exp1 env
+                            (let3-exp1-cont var1 var2 var3 exp2 exp3 body env cont)))
+      (diff-exp (exp1 exp2)
+                (value-of/k exp1 env
+                            (diff1-cont exp2 env cont)))
+      (call-exp (rator rand)
+                (value-of/k rator env
+                            (rator-cont rand env cont)))
+      (cons-exp (fst-exp snd-exp)
+                (value-of/k fst-exp env (cons-fst-cont snd-exp env cont)))
+      (car-exp (pair-exp)
+               (value-of/k pair-exp env (car-cont cont)))
+      (cdr-exp (pair-exp)
+               (value-of/k pair-exp env (cdr-cont cont)))
+      (null?-exp (expr)
+                 (value-of/k expr env (null?-cont cont)))
+      (nil-exp () (apply-cont cont (nil-val)))
+      )))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; run
+(define run
+  (lambda (code)
+    (value-of-program (scan&parse code))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; (trace value-of/k)
+;;; test
+(define code1
+  "
+  cons (-(0, 114), -(51, 4))
+  ")
+(check-equal? (run code1) (pair-val (num-val -114) (num-val 47)))
+
+(define code2
+  "
+  let p = cons (-(0, 114), -(51, 4))
+  in car(p)
+  ")
+(check-equal? (run code2) (num-val -114))
+
+(define code3
+  "
+  let p = cons (-(0, 114), -(51, 4))
+  in cdr(p)
+  ")
+(check-equal? (run code3) (num-val 47))
+
+(define code4
+  "
+  let foo = cons (-(0, 114), -(51, 4))
+  in if null?(foo) 
+     then 114
+     else 514
+  ")
+(check-equal? (run code4) (num-val 514))
+
+(define code5
+  "
+  let foo = cons (-(0, 114), emptylist)
+  in if null?(cdr(foo))
+     then 114
+     else 514
+  ")
+(check-equal? (run code5) (num-val 114))
