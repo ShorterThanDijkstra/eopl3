@@ -5,3 +5,4 @@
 5. exercise 3.26
 6. exercise 3.40
 7. exercise 4.12
+8. exercise 5.30
