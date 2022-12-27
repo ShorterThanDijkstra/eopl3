@@ -188,7 +188,7 @@
              (p-body expression?)
              (letrec-body expression?))
  (proc-exp (vars (list-of identifier?)) (body expression?))
- (call-exp (rator expression?) (rand (list-of expression?)))
+ (call-exp (rator expression?) (rands (list-of expression?)))
  (cons-exp (fst-exp expression?) (snd-exp expression?))
  (car-exp (pair-exp expression?))
  (cdr-exp (pair-exp expression?))

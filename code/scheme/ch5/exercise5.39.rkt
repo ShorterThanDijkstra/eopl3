@@ -13,10 +13,13 @@
   (lambda (proc1 vals cont)
     (cases proc
            proc1
-           (procedure
-            (vars body saved-env)
-            (value-of/k body (extend-env-vars vars vals saved-env) cont)))))
-
+           (procedure (vars body saved-env)
+                      (if (not (= (length vars) (length vals)))
+                          ;    (apply-cont (raise1-cont cont) 'ArityMismatch)
+                          (apply-cont (raise1-cont cont) (nil-val))
+                          (value-of/k body
+                                      (extend-env-vars vars vals saved-env)
+                                      cont))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; ExpVal data type
@@ -78,7 +81,6 @@
         (nil-val)
         (pair-val (car lst) (list->pair-vals (cdr lst))))))
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
 (define-datatype environment
@@ -111,7 +113,6 @@
                                (proc-val (procedure b-vars p-body env))
                                (apply-env saved-env search-var))))))
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Expression && Parsing
 (define-datatype program program? (a-program (expr expression?)))
@@ -126,6 +127,7 @@
  (zero?-exp (exp1 expression?))
  (var-exp (var identifier?))
  (diff-exp (exp1 expression?) (exp2 expression?))
+ (div-exp (exp1 expression?) (exp2 expression?))
  (let-exp (var identifier?) (exp expression?) (body expression?))
  (letrec-exp (p-name identifier?)
              (b-vars (list-of identifier?))
@@ -140,7 +142,8 @@
  (nil-exp)
  (list-exp (exps (list-of expression?)))
  (try-exp (exp1 expression?) (var identifier?) (handler-exp expression?))
- (raise-exp (exp1 expression?)))
+ (raise-exp (exp1 expression?))
+ (resume-exp (exp1 expression?)))
 
 (define the-lexical-spec
   '((whitespace (whitespace) skip)
@@ -153,7 +156,8 @@
   '((program (expression) a-program)
     (expression (number) const-exp)
     (expression (identifier) var-exp)
-    (expression ("-" "(" expression "," expression ")") diff-exp)
+    (expression ("sub" "(" expression "," expression ")") diff-exp)
+    (expression ("div" "(" expression "," expression ")") div-exp)
     (expression ("zero?" "(" expression ")") zero?-exp)
     (expression ("if" expression "then" expression "else" expression) if-exp)
     (expression ("let" identifier "=" expression "in" expression) let-exp)
@@ -177,7 +181,8 @@
     (expression ("list" "(" (separated-list expression ",") ")") list-exp)
     (expression ("try" expression "catch" "(" identifier ")" expression)
                 try-exp)
-    (expression ("raise" expression) raise-exp)))
+    (expression ("raise" "(" expression ")") raise-exp)
+    (expression ("resume" "(" expression ")") resume-exp)))
 
 (define scan&parse
   (sllgen:make-string-parser the-lexical-spec the-grammar-spec))
@@ -185,35 +190,75 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Exception
 (define report-uncaught-exception
-  (lambda () (eopl:printf "Uncaught Exception.~%")))
+  (lambda (val) (eopl:printf "Uncaught exception: ~s.~%" val)))
+
+(define report-unable-to-resume
+  (lambda (val) (eopl:printf "Unable to resume ~s.~%" val)))
 
 (define apply-handler
-  (lambda (val cont)
+  (lambda (val cont resume)
     (cases
      continuation
      cont
-     (try-cont
-      (var handler-exp saved-env saved-cont)
-      (value-of/k handler-exp (extend-env var val saved-env) saved-cont))
-     (end-cont () (report-uncaught-exception))
-     (zero1-cont (saved-cont) (apply-handler val saved-cont))
+     (try-cont (var handler-exp saved-env saved-cont)
+               (value-of/k handler-exp
+                           (extend-env var val saved-env)
+                           (normal-resume-cont saved-cont resume)))
+     (end-cont () (report-uncaught-exception val))
+     (zero1-cont (saved-cont) (apply-handler val saved-cont resume))
      (let-exp-cont (var body saved-env saved-cont)
-                   (apply-handler val saved-cont))
+                   (apply-handler val saved-cont resume))
      (if-test-cont (exp2 exp3 saved-env saved-cont)
-                   (apply-handler val saved-cont))
-     (diff1-cont (exp2 env saved-cont) (apply-handler val saved-cont))
-     (diff2-cont (val1 saved-cont) (apply-handler val saved-cont))
-     (rator-cont (rands env saved-cont) (apply-handler val saved-cont))
+                   (apply-handler val saved-cont resume))
+     (diff1-cont (exp2 env saved-cont) (apply-handler val saved-cont resume))
+     (diff2-cont (val1 saved-cont) (apply-handler val saved-cont resume))
+     (div1-cont (exp2 env saved-cont) (apply-handler val saved-cont resume))
+     (div2-cont (val1 saved-cont) (apply-handler val saved-cont resume))
+     (rator-cont (rands env saved-cont) (apply-handler val saved-cont resume))
      (rands-cont (proc1 rands val1 env saved-cont)
-                 (apply-handler val saved-cont))
-     (cons-fst-cont (snd-exp env saved-cont) (apply-handler val saved-cont))
-     (cons-snd-cont (val1 saved-cont) (apply-handler val saved-cont))
-     (car-cont (saved-cont) (apply-handler val saved-cont))
-     (cdr-cont (saved-cont) (apply-handler val saved-cont))
-     (null?-cont (saved-cont) (apply-handler val saved-cont))
-     (list-cont (exps vals env saved-cont) (apply-handler val saved-cont))
-     (raise1-cont (saved-cont) (apply-handler val saved-cont)))))
+                 (apply-handler val saved-cont resume))
+     (cons-fst-cont (snd-exp env saved-cont)
+                    (apply-handler val saved-cont resume))
+     (cons-snd-cont (val1 saved-cont) (apply-handler val saved-cont resume))
+     (car-cont (saved-cont) (apply-handler val saved-cont resume))
+     (cdr-cont (saved-cont) (apply-handler val saved-cont resume))
+     (null?-cont (saved-cont) (apply-handler val saved-cont resume))
+     (list-cont (exps vals env saved-cont)
+                (apply-handler val saved-cont resume))
+     (raise1-cont (saved-cont) (apply-handler val saved-cont resume))
+     (resume-cont (saved-cont) (apply-handler val saved-cont resume))
+     (normal-resume-cont (saved-cont resume1)
+                         (apply-handler val saved-cont resume)))))
 
+(define apply-resume
+  (lambda (cont val)
+    (cases
+     continuation
+     cont
+     (normal-resume-cont (saved-cont resume1) (apply-cont resume1 val))
+     (end-cont () (report-unable-to-resume val))
+     (try-cont (var handler-exp saved-env saved-cont)
+               (apply-resume saved-cont val))
+     (zero1-cont (saved-cont) (apply-resume saved-cont val))
+     (let-exp-cont (var body saved-env saved-cont)
+                   (apply-resume saved-cont val))
+     (if-test-cont (exp2 exp3 saved-env saved-cont)
+                   (apply-resume saved-cont val))
+     (diff1-cont (exp2 env saved-cont) (apply-resume saved-cont val))
+     (diff2-cont (val1 saved-cont) (apply-resume saved-cont val))
+     (div1-cont (exp2 env saved-cont) (apply-resume saved-cont val))
+     (div2-cont (val1 saved-cont) (apply-resume saved-cont val))
+     (rator-cont (rands env saved-cont) (apply-resume saved-cont val))
+     (rands-cont (proc1 rands val1 env saved-cont)
+                 (apply-resume saved-cont val))
+     (cons-fst-cont (snd-exp env saved-cont) (apply-resume saved-cont val))
+     (cons-snd-cont (val1 saved-cont) (apply-resume saved-cont val))
+     (car-cont (saved-cont) (apply-resume saved-cont val))
+     (cdr-cont (saved-cont) (apply-resume saved-cont val))
+     (null?-cont (saved-cont) (apply-resume saved-cont val))
+     (list-cont (exps vals env saved-cont) (apply-resume saved-cont val))
+     (raise1-cont (saved-cont) (apply-resume saved-cont val))
+     (resume-cont (saved-cont) (apply-resume saved-cont val)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;Continuation
@@ -232,6 +277,8 @@
                (saved-cont continuation?))
  (diff1-cont (exp2 expression?) (env environment?) (saved-cont continuation?))
  (diff2-cont (val1 expval?) (saved-cont continuation?))
+ (div1-cont (exp2 expression?) (env environment?) (saved-cont continuation?))
+ (div2-cont (val1 expval?) (saved-cont continuation?))
  (rator-cont (rands (list-of expression?))
              (env environment?)
              (saved-cont continuation?))
@@ -255,7 +302,9 @@
            (handler-exp expression?)
            (env environment?)
            (saved-cont continuation?))
- (raise1-cont (saved-cont continuation?)))
+ (raise1-cont (saved-cont continuation?))
+ (resume-cont (saved-cont continuation?))
+ (normal-resume-cont (normal continuation?) (resume continuation?)))
 
 (define apply-cont
   (lambda (cont val)
@@ -264,7 +313,7 @@
      cont
      (end-cont ()
                (begin
-                 (eopl:printf "End of computation.~%")
+                ;  (eopl:printf "End of computation.~%")
                  val))
      (zero1-cont (saved-cont)
                  (apply-cont saved-cont (bool-val (zero? (expval->num val)))))
@@ -279,6 +328,14 @@
      (diff2-cont (val1 saved-cont)
                  (let ([num1 (expval->num val1)] [num2 (expval->num val)])
                    (apply-cont saved-cont (num-val (- num1 num2)))))
+     (div1-cont (exp2 env saved-cont)
+                (value-of/k exp2 env (div2-cont val saved-cont)))
+     (div2-cont (val1 saved-cont)
+                (let ([num1 (expval->num val1)] [num2 (expval->num val)])
+                  (if (= num2 0)
+                      ;    (apply-cont (raise1-cont saved-cont) 'DivisionByZero)
+                      (apply-cont (raise1-cont saved-cont) (nil-val))
+                      (apply-cont saved-cont (num-val (/ num1 num2))))))
      (rator-cont
       (rands env saved-cont)
       (if (null? rands)
@@ -311,7 +368,9 @@
                       env
                       (list-cont (cdr exps) (cons val vals) env saved-cont))))
      (try-cont (var handler-exp env saved-cont) (apply-cont saved-cont val))
-     (raise1-cont (saved-cont) (apply-handler val saved-cont)))))
+     (raise1-cont (saved-cont) (apply-handler val saved-cont saved-cont))
+     (resume-cont (saved-cont) (apply-resume saved-cont val))
+     (normal-resume-cont (saved-cont resume1) (apply-cont saved-cont val)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Interpreter
@@ -345,6 +404,7 @@
      (let-exp (var exp1 body)
               (value-of/k exp1 env (let-exp-cont var body env cont)))
      (diff-exp (exp1 exp2) (value-of/k exp1 env (diff1-cont exp2 env cont)))
+     (div-exp (exp1 exp2) (value-of/k exp1 env (div1-cont exp2 env cont)))
      (call-exp (rator rands) (value-of/k rator env (rator-cont rands env cont)))
      (cons-exp (fst-exp snd-exp)
                (value-of/k fst-exp env (cons-fst-cont snd-exp env cont)))
@@ -359,7 +419,8 @@
           (value-of/k (car exps) env (list-cont (cdr exps) (list) env cont))))
      (try-exp (exp1 var handler-exp)
               (value-of/k exp1 env (try-cont var handler-exp env cont)))
-     (raise-exp (exp1) (value-of/k exp1 env (raise1-cont cont))))))
+     (raise-exp (exp1) (value-of/k exp1 env (raise1-cont cont)))
+     (resume-exp (exp1) (value-of/k exp1 env (resume-cont cont))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; run
@@ -373,10 +434,10 @@
   "let index = proc (n)
                  letrec inner (lst)
                           = if null?(lst)
-                            then raise 99
-                            else if zero?(-(car(lst), n))
+                            then raise(99)
+                            else if zero?(sub(car(lst), n))
                                  then 0
-                                 else -((inner cdr(lst)), -1)
+                                 else sub((inner cdr(lst)), -1)
                  in proc (lst)
                       try (inner lst)
                       catch (x) -1
@@ -387,10 +448,10 @@
   "let index = proc (n)
                  letrec inner (lst)
                           = if null?(lst)
-                            then raise -1
-                            else if zero?(-(car(lst), n))
+                            then raise (-1)
+                            else if zero?(sub(car(lst), n))
                                  then 0
-                                 else -((inner cdr(lst)), -1)
+                                 else sub((inner cdr(lst)), -1)
                  in proc (lst)
                       try (inner lst)
                       catch (x) -1
@@ -401,24 +462,24 @@
   "let index = proc (n)
                  letrec inner (lst)
                           = if null?(lst)
-                            then raise -1
-                            else if zero?(-(car(lst), n))
+                            then raise(-1)
+                            else if zero?(sub(car(lst), n))
                                  then 0
-                                 else -((inner cdr(lst)), -1)
+                                 else sub((inner cdr(lst)), -1)
                  in proc (lst)
                       (inner lst)
   in ((index 5) list(2, 7, 11, 71, 51))")
 (run code3)
 
 (define code4
-  "let foo = proc(dummy) raise -1
-   in let bar = proc(dummy) try (foo 0) catch(e) raise -2
-      in let baz = proc(dummy) try (bar 0) catch(e) raise -3
+  "let foo = proc(dummy) raise(-1)
+   in let bar = proc(dummy) try (foo 0) catch(e) raise(-2)
+      in let baz = proc(dummy) try (bar 0) catch(e) raise(-3)
          in try (baz 0) catch(e) e")
 (check-equal? (run code4) (num-val -3))
 (define code5
   "
-  let sum = proc(x, y, z) -(x, -(0, -(y, -(0, z))))
+  let sum = proc(x, y, z) sub(x, sub(0, sub(y, sub(0, z))))
   in (sum 114 514 114514)
   ")
 (check-equal? (run code5) (num-val 115142))
@@ -432,16 +493,77 @@
 (define code7
   "
   letrec double(x)
-          = if zero?(x) then 0 else -((double -(x,1)), -2)
+          = if zero?(x) then 0 else sub((double sub(x,1)), -2)
   in (double 6)
    ")
 (check-equal? (run code7) (num-val 12))
 
-
 (define code8
   "
-  try let x = raise 114
-      in -(x, 514)
+  let sum = proc(x, y, z) sub(x, sub(0, sub(y, sub(0, z))))
+  in (sum 114 514)
+  ")
+(run code8)
+
+(define code9 "
+  div(2, 5)
+  ")
+(check-equal? (run code9) (num-val 2/5))
+
+(define code10 "
+  div(1, 0)
+  ")
+(run code10)
+
+(define code11
+  "
+  try let x = raise(114)
+      in sub(x, 514)
+  catch (e) resume(sub(e, e))
+  ")
+(check-equal? (run code11) (num-val -514))
+
+(define code12
+  "
+  try let x = raise(114)
+      in sub(x, 514)
   catch (e) e
   ")
-(check-equal? (run code8) (num-val 114))
+(check-equal? (run code12) (num-val 114))
+
+(define code13 "
+  resume(114514)
+  ")
+(run code13)
+
+(define code14
+  "
+  try let x = div(3, 0)
+      in sub(x, 1)
+  catch (e) resume(114)
+  ")
+(check-equal? (run code14) (num-val 113))
+
+;;; just for fun
+(define show-expval
+  (lambda (v)
+    (cases expval
+           v
+           (num-val (num) num)
+           (bool-val (bool) bool)
+           (proc-val (proc) "<procedure>")
+           (pair-val (fst snd) "<pair>")
+           (nil-val () "nil"))))
+
+(define value-of-repl
+  (lambda (pgm)
+    (cases program
+           pgm
+           (a-program (exp1)
+                      (show-expval (value-of/k exp1 (init-env) (end-cont)))))))
+
+(define read-eval-print
+  (sllgen:make-rep-loop
+   ">>> "
+   value-of-repl
+   (sllgen:make-stream-parser the-lexical-spec the-grammar-spec)))
