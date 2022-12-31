@@ -17,7 +17,6 @@
             (vars body saved-env)
             (value-of/k body (extend-env-vars vars vals saved-env) cont)))))
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; ExpVal data type
 (define-datatype expval
@@ -78,7 +77,6 @@
         (nil-val)
         (pair-val (car lst) (list->pair-vals (cdr lst))))))
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
 (define-datatype environment
@@ -110,7 +108,6 @@
                            (if (eqv? search-var p-name)
                                (proc-val (procedure b-vars p-body env))
                                (apply-env saved-env search-var))))))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Expression && Parsing
@@ -183,135 +180,181 @@
   (sllgen:make-string-parser the-lexical-spec the-grammar-spec))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Exception
+;;;Continuation
+
 (define report-uncaught-exception
   (lambda () (eopl:printf "Uncaught Exception.~%")))
 
+(define end-cont
+  (lambda ()
+    (let ([cont-apply (lambda (val)
+                        (begin
+                          (eopl:printf "End of computation.~%")
+                          val))]
+          [handler-apply (lambda () 'end-cont)])
+      (list cont-apply handler-apply))))
+
+(define zero1-cont
+  (lambda (saved-cont)
+    (let ([cont-apply (lambda (val)
+                        (apply-cont saved-cont
+                                    (bool-val (zero? (expval->num val)))))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define let-exp-cont
+  (lambda (var body saved-env saved-cont)
+    (let ([cont-apply
+           (lambda (val)
+             (value-of/k body (extend-env var val saved-env) saved-cont))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define if-test-cont
+  (lambda (exp2 exp3 saved-env saved-cont)
+    (let ([cont-apply (lambda (val)
+                        (if (expval->bool val)
+                            (value-of/k exp2 saved-env saved-cont)
+                            (value-of/k exp3 saved-env saved-cont)))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define diff1-cont
+  (lambda (exp2 saved-env saved-cont)
+    (let ([cont-apply
+           (lambda (val)
+             (value-of/k exp2 saved-env (diff2-cont val saved-cont)))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define diff2-cont
+  (lambda (val1 saved-cont)
+    (let ([cont-apply
+           (lambda (val)
+             (let ([num1 (expval->num val1)] [num2 (expval->num val)])
+               (apply-cont saved-cont (num-val (- num1 num2)))))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define rator-cont
+  (lambda (rands saved-env saved-cont)
+    (let ([cont-apply
+           (lambda (val)
+             (if (null? rands)
+                 (apply-procedure/k (expval->proc val) '() saved-cont)
+                 (value-of/k
+                  (car rands)
+                  saved-env
+                  (rands-cont val (cdr rands) '() saved-env saved-cont))))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define rands-cont
+  (lambda (proc1 rands vals saved-env saved-cont)
+    (let ([cont-apply (lambda (val)
+                        (let ([new-vals (cons val vals)])
+                          (if (null? rands)
+                              (apply-procedure/k (expval->proc proc1)
+                                                 (reverse new-vals)
+                                                 saved-cont)
+                              (value-of/k (car rands)
+                                          saved-env
+                                          (rands-cont proc1
+                                                      (cdr rands)
+                                                      new-vals
+                                                      saved-env
+                                                      saved-cont)))))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define cons-fst-cont
+  (lambda (snd-exp saved-env saved-cont)
+    (let ([cont-apply
+           (lambda (val)
+             (value-of/k snd-exp saved-env (cons-snd-cont val saved-cont)))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define cons-snd-cont
+  (lambda (val1 saved-cont)
+    (let ([cont-apply (lambda (val)
+                        (apply-cont saved-cont (pair-val val1 val)))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define car-cont
+  (lambda (saved-cont)
+    (let ([cont-apply (lambda (val)
+                        (let ([fst (expval->pair-fst val)])
+                          (apply-cont saved-cont fst)))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define cdr-cont
+  (lambda (saved-cont)
+    (let ([cont-apply (lambda (val)
+                        (let ([snd (expval->pair-snd val)])
+                          (apply-cont saved-cont snd)))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define null?-cont
+  (lambda (saved-cont)
+    (let ([cont-apply (lambda (val)
+                        (apply-cont saved-cont (bool-val (nil? val))))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define list-cont
+  (lambda (exps vals saved-env saved-cont)
+    (let ([cont-apply (lambda (val)
+                        (if (null? exps)
+                            (apply-cont saved-cont
+                                        (list->pair-vals
+                                         (reverse (cons val vals))))
+                            (value-of/k (car exps)
+                                        saved-env
+                                        (list-cont (cdr exps)
+                                                   (cons val vals)
+                                                   saved-env
+                                                   saved-cont))))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define try-cont
+  (lambda (var handler-exp saved-env saved-cont)
+    (let ([cont-apply (lambda (val) (apply-cont saved-cont val))]
+          [handler-apply
+           (lambda () (list 'try-cont var handler-exp saved-env saved-cont))])
+      (list cont-apply handler-apply))))
+
+(define raise1-cont
+  (lambda (saved-cont)
+    (let ([cont-apply (lambda (val) (apply-handler val saved-cont))]
+          [handler-apply (lambda () saved-cont)])
+      (list cont-apply handler-apply))))
+
+(define apply-cont (lambda (cont val) ((car cont) val)))
+
+(define try-cont?
+  (lambda (cont)
+    (and (list? cont) (= (length cont) 5) (eqv? (car cont) 'try-cont))))
+
+(define end-cont? (lambda (v) (eqv? v 'end-cont)))
+
 (define apply-handler
   (lambda (val cont)
-    (cases
-     continuation
-     cont
-     (try-cont
-      (var handler-exp saved-env saved-cont)
-      (value-of/k handler-exp (extend-env var val saved-env) saved-cont))
-     (end-cont () (report-uncaught-exception))
-     (zero1-cont (saved-cont) (apply-handler val saved-cont))
-     (let-exp-cont (var body saved-env saved-cont)
-                   (apply-handler val saved-cont))
-     (if-test-cont (exp2 exp3 saved-env saved-cont)
-                   (apply-handler val saved-cont))
-     (diff1-cont (exp2 env saved-cont) (apply-handler val saved-cont))
-     (diff2-cont (val1 saved-cont) (apply-handler val saved-cont))
-     (rator-cont (rands env saved-cont) (apply-handler val saved-cont))
-     (rands-cont (proc1 rands val1 env saved-cont)
-                 (apply-handler val saved-cont))
-     (cons-fst-cont (snd-exp env saved-cont) (apply-handler val saved-cont))
-     (cons-snd-cont (val1 saved-cont) (apply-handler val saved-cont))
-     (car-cont (saved-cont) (apply-handler val saved-cont))
-     (cdr-cont (saved-cont) (apply-handler val saved-cont))
-     (null?-cont (saved-cont) (apply-handler val saved-cont))
-     (list-cont (exps vals env saved-cont) (apply-handler val saved-cont))
-     (raise1-cont (saved-cont) (apply-handler val saved-cont)))))
+    (let ([new-cont ((cadr cont))])
+      (cond
+        [(end-cont? new-cont) (report-uncaught-exception)]
+        [(try-cont? new-cont)
+         (let* ([var (cadr new-cont)]
+                [handler-exp (caddr new-cont)]
+                [saved-env (cadddr new-cont)]
+                [saved-cont (car (cddddr new-cont))])
+           (value-of/k handler-exp (extend-env var val saved-env) saved-cont))]
+        [else (apply-handler val new-cont)]))))
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;Continuation
-(define-datatype
- continuation
- continuation?
- (end-cont)
- (zero1-cont (saved-cont continuation?))
- (let-exp-cont (var identifier?)
-               (body expression?)
-               (env environment?)
-               (saved-cont continuation?))
- (if-test-cont (exp2 expression?)
-               (exp3 expression?)
-               (env environment?)
-               (saved-cont continuation?))
- (diff1-cont (exp2 expression?) (env environment?) (saved-cont continuation?))
- (diff2-cont (val1 expval?) (saved-cont continuation?))
- (rator-cont (rands (list-of expression?))
-             (env environment?)
-             (saved-cont continuation?))
- (rands-cont (proc1 expval?)
-             (rands (list-of expression?))
-             (vals (list-of expval?))
-             (env environment?)
-             (saved-cont continuation?))
- (cons-fst-cont (snd-exp expression?)
-                (env environment?)
-                (saved-cont continuation?))
- (cons-snd-cont (val1 expval?) (saved-cont continuation?))
- (car-cont (saved-cont continuation?))
- (cdr-cont (saved-cont continuation?))
- (null?-cont (saved-cont continuation?))
- (list-cont (exps (list-of expression?))
-            (vals (list-of expval?))
-            (env environment?)
-            (saved-cont continuation?))
- (try-cont (var identifier?)
-           (handler-exp expression?)
-           (env environment?)
-           (saved-cont continuation?))
- (raise1-cont (saved-cont continuation?)))
-
-(define apply-cont
-  (lambda (cont val)
-    (cases
-     continuation
-     cont
-     (end-cont ()
-               (begin
-                 (eopl:printf "End of computation.~%")
-                 val))
-     (zero1-cont (saved-cont)
-                 (apply-cont saved-cont (bool-val (zero? (expval->num val)))))
-     (let-exp-cont (var body saved-env saved-cont)
-                   (value-of/k body (extend-env var val saved-env) saved-cont))
-     (if-test-cont (exp2 exp3 saved-env saved-cont)
-                   (if (expval->bool val)
-                       (value-of/k exp2 saved-env saved-cont)
-                       (value-of/k exp3 saved-env saved-cont)))
-     (diff1-cont (exp2 env saved-cont)
-                 (value-of/k exp2 env (diff2-cont val saved-cont)))
-     (diff2-cont (val1 saved-cont)
-                 (let ([num1 (expval->num val1)] [num2 (expval->num val)])
-                   (apply-cont saved-cont (num-val (- num1 num2)))))
-     (rator-cont
-      (rands env saved-cont)
-      (if (null? rands)
-          (apply-procedure/k (expval->proc val) '() saved-cont)
-          (value-of/k (car rands)
-                      env
-                      (rands-cont val (cdr rands) '() env saved-cont))))
-     (rands-cont
-      (p rands vals env saved-cont)
-      (let ([new-vals (cons val vals)])
-        (if (null? rands)
-            (apply-procedure/k (expval->proc p) (reverse new-vals) saved-cont)
-            (value-of/k (car rands)
-                        env
-                        (rands-cont p (cdr rands) new-vals env saved-cont)))))
-     (cons-fst-cont (snd-exp env saved-cont)
-                    (value-of/k snd-exp env (cons-snd-cont val saved-cont)))
-     (cons-snd-cont (val1 saved-cont)
-                    (apply-cont saved-cont (pair-val val1 val)))
-     (car-cont (saved-cont)
-               (let ([fst (expval->pair-fst val)]) (apply-cont saved-cont fst)))
-     (cdr-cont (saved-cont)
-               (let ([snd (expval->pair-snd val)]) (apply-cont saved-cont snd)))
-     (null?-cont (saved-cont) (apply-cont saved-cont (bool-val (nil? val))))
-     (list-cont
-      (exps vals env saved-cont)
-      (if (null? exps)
-          (apply-cont saved-cont (list->pair-vals (reverse (cons val vals))))
-          (value-of/k (car exps)
-                      env
-                      (list-cont (cdr exps) (cons val vals) env saved-cont))))
-     (try-cont (var handler-exp env saved-cont) (apply-cont saved-cont val))
-     (raise1-cont (saved-cont) (apply-handler val saved-cont)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Interpreter
@@ -437,9 +480,7 @@
    ")
 (check-equal? (run code7) (num-val 12))
 
-
-(define code8
-  "
+(define code8 "
   try let x = raise 114
       in -(x, 514)
   catch (e) e
