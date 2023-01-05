@@ -7,4 +7,6 @@
 7. exercise 4.12
 8. exercise 5.30
 9. exercise 5.39
+10. exercise 5.51
+
 

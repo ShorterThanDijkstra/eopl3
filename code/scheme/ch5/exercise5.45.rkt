@@ -242,7 +242,8 @@
  (list-exp (exps (list-of expression?)))
  (mutex-exp)
  (wait-exp (exp1 expression?))
- (signal-exp (exp1 expression?)))
+ (signal-exp (exp1 expression?))
+ (yield-exp))
 
 (define the-lexical-spec
   '((whitespace (whitespace) skip)
@@ -277,7 +278,8 @@
     (expression ("[" (separated-list expression ",") "]") list-exp)
     (expression ("mutex" "(" ")") mutex-exp)
     (expression ("wait" "(" expression ")") wait-exp)
-    (expression ("signal" "(" expression ")") signal-exp)))
+    (expression ("signal" "(" expression ")") signal-exp)
+    (expression ("yield" "(" ")") yield-exp)))
 
 (define scan&parse
   (sllgen:make-string-parser the-lexical-spec the-grammar-spec))
@@ -288,7 +290,7 @@
 
 (define empty? null?)
 
-(define enqueue (lambda (queue th) (append queue (list th))))
+(define enqueue (lambda (queue val) (append queue (list val))))
 
 (define dequeue (lambda (queue f) (f (car queue) (cdr queue))))
 
@@ -497,7 +499,11 @@
           (value-of/k (car exps) env (list-cont (cdr exps) (list) env cont))))
      (mutex-exp () (apply-cont cont (mutex-val (new-mutex))))
      (wait-exp (exp1) (value-of/k exp1 env (wait-cont cont)))
-     (signal-exp (exp1) (value-of/k exp1 env (signal-cont cont))))))
+     (signal-exp (exp1) (value-of/k exp1 env (signal-cont cont)))
+     (yield-exp
+      ()
+      (place-on-ready-queue! (lambda () (apply-cont cont (num-val 99))))
+      (run-next-thread)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; run
@@ -627,3 +633,14 @@
                  x
             end")
 (run str10)
+(define str11
+  "let f = proc(x) print(x)
+   in let x = 0
+      in begin
+         spawn(f);
+         spawn(f);
+         set x = yield();
+         x
+      end")
+(check-equal? (run str11) (num-val 99))
+  

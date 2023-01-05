@@ -164,7 +164,7 @@
                        (run-next-thread)]
                       [else
                        (setref! ref-to-closed? #t)
-                       (th)])))))
+                       (resume-thread th)])))))
 
 ; signal-mutex : Mutex × Thread → FinalAnswer
 (define signal-mutex
@@ -182,7 +182,7 @@
                              (lambda (first-waiting-th other-waiting-ths)
                                (place-on-ready-queue! first-waiting-th)
                                (setref! ref-to-wait-queue other-waiting-ths)))))
-              (th))))))
+              (resume-thread th))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
@@ -284,6 +284,19 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Scheduler
+(define-datatype thread thread?
+  (cont-thread (saved-cont continuation?)
+               (val expval?))
+  (procedure-thread (proc1 proc?)(val expval?) (saved-cont continuation?)))
+
+(define resume-thread
+  (lambda (th)
+    (cases thread th
+           (cont-thread (saved-cont val)
+                     (apply-cont saved-cont val))
+           (procedure-thread (proc1 val saved-cont)
+                             (apply-procedure/k proc1 val saved-cont)))))
+                             
 (define empty-queue (lambda () '()))
 
 (define empty? null?)
@@ -317,7 +330,7 @@
                  (lambda (first-ready-thread other-ready-threads)
                    (set! the-ready-queue other-ready-threads)
                    (set! the-time-remaining the-max-time-slice)
-                   (first-ready-thread))))))
+                   (resume-thread first-ready-thread))))))
 ; set-final-answer! : ExpVal → Unspecified
 (define set-final-answer! (lambda (val) (set! the-final-answer val)))
 ; time-expired? : () → Bool
@@ -370,7 +383,7 @@
   (lambda (cont val)
     (if (time-expired?)
         (begin
-          (place-on-ready-queue! (lambda () (apply-cont cont val)))
+          (place-on-ready-queue! (cont-thread cont val))
           (run-next-thread))
         (begin
           (decrement-timer!)
@@ -412,8 +425,7 @@
             (saved-cont)
             (let ([proc1 (expval->proc val)])
               (place-on-ready-queue!
-               (lambda ()
-                 (apply-procedure/k proc1 (num-val 28) (end-subthread-cont))))
+                 (procedure-thread proc1 (num-val 28) (end-subthread-cont)))
               (apply-cont saved-cont (num-val 73))))
            (end-main-thread-cont () (set-final-answer! val) (run-next-thread))
            (end-subthread-cont () (run-next-thread))
@@ -439,11 +451,11 @@
            (wait-cont (saved-cont)
                       (wait-for-mutex
                        (expval->mutex val)
-                       (lambda () (apply-cont saved-cont (num-val 52)))))
+                       (cont-thread saved-cont (num-val 52))))
            (signal-cont (saved-cont)
                         (signal-mutex
                          (expval->mutex val)
-                         (lambda () (apply-cont saved-cont (num-val 53))))))))))
+                         (cont-thread saved-cont (num-val 53)))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Interpreter

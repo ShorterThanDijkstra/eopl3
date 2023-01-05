@@ -627,3 +627,29 @@
                  x
             end")
 (run str10)
+
+
+
+(define str11
+  "let x = 0
+   in let inc1 = proc(x) -(x, -1)
+      in let mut = mutex()
+         in let incr_x = proc (id)
+                           proc (dummy)
+                               set x = (inc1 x)
+            in begin
+                 wait(mut);
+                 spawn((incr_x 100));
+                 signal(mut);
+  
+                 wait(mut);
+                 spawn((incr_x 200));
+                 signal(mut);
+  
+                 wait(mut);
+                 spawn((incr_x 300));
+                 signal(mut);
+  
+                 x
+            end")
+(run str11)

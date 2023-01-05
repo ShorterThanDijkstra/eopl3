@@ -288,7 +288,7 @@
 
 (define empty? null?)
 
-(define enqueue (lambda (queue th) (append queue (list th))))
+(define enqueue (lambda (queue val) (append queue (list val))))
 
 (define dequeue (lambda (queue f) (f (car queue) (cdr queue))))
 
@@ -627,3 +627,28 @@
                  x
             end")
 (run str10)
+
+(define str11
+  "let mut1 = mutex()
+   in letrec timeconsumming(n) = if zero?(n) then 0 else -((timeconsumming -(n, 1)), -(0, 2))
+   in let mut2 = mutex()
+      in let f1 = proc(dummy) begin
+                            wait(mut2);
+                            (timeconsumming 100);
+                            wait(mut1);
+                            print(1);
+                            signal(mut1);
+                            signal(mut2)
+                          end
+         in let f2 = proc(dummy) begin
+                                    wait(mut1);
+                                    (timeconsumming 100);
+                                    wait(mut2);
+                                    print(2);
+                                    signal(mut2);
+                                    signal(mut1)
+                                  end
+            in begin spawn(f1);
+                     spawn(f2);
+                     (timeconsumming 100)
+               end")
