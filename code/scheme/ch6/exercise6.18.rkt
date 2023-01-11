@@ -96,21 +96,22 @@
     (number ("-" digit (arbno digit)) number)))
 
 (define cps-out-grammar-spec
-  '((CpsProgram (TfExp) a-cps-program)
-    (SimpleExp (number) cps-const-exp)
-    (SimpleExp (identifier) cps-var-exp)
-    (SimpleExp ("-" "(" SimpleExp "," SimpleExp ")") cps-diff-exp)
-    (SimpleExp ("zero?" "(" SimpleExp ")") cps-zero?-exp)
-    (SimpleExp ("proc" "(" (separated-list identifier ",") ")" TfExp) cps-proc-exp)
-    (TfExp (SimpleExp) simple-exp->exp)
-    (TfExp ("let" identifier "=" SimpleExp "in" TfExp) cps-let-exp)
-    (TfExp ("letrec"
-            (arbno identifier "(" (separated-list identifier ",") ")" "=" TfExp)
-            "in"
-            TfExp)
-           cps-letrec-exp)
-    (TfExp ("if" SimpleExp "then" TfExp "else" TfExp) cps-if-exp)
-    (TfExp ("(" SimpleExp (arbno SimpleExp) ")") cps-call-exp)))
+  '((CpsProgram  (TfExp) a-cps-program)
+    (ConstVarExp (number) cps-const-exp)
+    (ConstVarExp (identifier) cps-var-exp)
+    (SimpleExp   (ConstVarExp) const-var->simple-exp)
+    (SimpleExp   ("-" "(" ConstVarExp "," ConstVarExp ")") cps-diff-exp)
+    (SimpleExp   ("zero?" "(" ConstVarExp ")") cps-zero?-exp)
+    (SimpleExp   ("proc" "(" (separated-list identifier ",") ")" TfExp) cps-proc-exp)
+    (TfExp       (SimpleExp) simple-exp->exp)
+    (TfExp       ("let" identifier "=" SimpleExp "in" TfExp) cps-let-exp)
+    (TfExp       ("letrec"
+                  (arbno identifier "(" (separated-list identifier ",") ")" "=" TfExp)
+                  "in"
+                  TfExp)
+                 cps-letrec-exp)
+    (TfExp       ("if" SimpleExp "then" TfExp "else" TfExp) cps-if-exp)
+    (TfExp       ("(" SimpleExp (arbno SimpleExp) ")") cps-call-exp)))
 
 (define list-cps-out-datatypes
   (lambda ()
@@ -131,20 +132,26 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Interpreter
+(define value-of-const-var-exp
+  (lambda (exp1 env)
+    (cases ConstVarExp exp1
+        (cps-const-exp (num) (num-val num))
+        (cps-var-exp (var) (apply-env env var)))))
+
 (define value-of-simple-exp
   (lambda (simple env)
     (cases
      SimpleExp
      simple
-     (cps-const-exp (num) (num-val num))
-     (cps-var-exp (var) (apply-env env var))
+     (const-var->simple-exp (exp1)
+                            (value-of-const-var-exp exp1 env))
      (cps-diff-exp (exp1 exp2)
-                   (let ([val1 (value-of-simple-exp exp1 env)]
-                         [val2 (value-of-simple-exp exp2 env)])
+                   (let ([val1 (value-of-const-var-exp exp1 env)]
+                         [val2 (value-of-const-var-exp exp2 env)])
                      (let ([num1 (expval->num val1)] [num2 (expval->num val2)])
                        (num-val (- num1 num2)))))
      (cps-zero?-exp (exp1)
-                    (let ([val1 (value-of-simple-exp exp1 env)])
+                    (let ([val1 (value-of-const-var-exp exp1 env)])
                       (let ([num1 (expval->num val1)])
                         (if (zero? num1) (bool-val #t) (bool-val #f)))))
      (cps-proc-exp (vars body) (proc-val (procedure vars body env))))))
