@@ -134,7 +134,7 @@
    (p-bodies (list-of expression?))
    (letrec-body expression?))
   (proc-exp
-   (var identifier?)
+   (vars (list-of identifier?))
    (body expression?))
   (call-exp
    (rator expression?)
@@ -173,8 +173,8 @@
                          (extend-env var (value-of exp env) env)))
       (letrec-exp (proc-names bound-varss proc-bodies letrec-body)
                   (value-of letrec-body (extend-env-rec-list proc-names bound-varss proc-bodies env)))
-      (proc-exp (var body)
-                (proc-val (procedure var body env)))
+      (proc-exp (vars body)
+                (proc-val (procedure vars body env)))
       (call-exp (rator rands)
                 ; (write env)
                 ; (newline)
@@ -204,7 +204,7 @@
     (expression ("if" expression "then" expression "else" expression) if-exp)
     (expression ("let" identifier "=" expression "in" expression) let-exp)
     (expression ("letrec" (arbno identifier "(" (arbno identifier) ")" "=" expression) "in" expression) letrec-exp)
-    (expression ("proc" "(" identifier ")" expression) proc-exp)
+    (expression ("proc" "(" (arbno identifier) ")" expression) proc-exp)
     (expression ("(" expression (arbno expression ) ")") call-exp)
     ))
 
@@ -260,3 +260,13 @@
     in (evenSum 11 451)
   ")
 (check-equal? (run code4) (bool-val #t))
+
+(define code5
+  "let sum = proc(x y z) -(x, -(0, -(y, -(0, z))))
+   in (sum 11 45 14)")
+(check-equal? (run code5) (num-val 70))
+
+(define code6
+  "let foo = proc() 114514
+   in (foo)")
+(check-equal? (run code6) (num-val 114514))

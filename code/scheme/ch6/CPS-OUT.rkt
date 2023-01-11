@@ -5,7 +5,7 @@
 (define-datatype proc
                  proc?
                  (procedure (vars (list-of identifier?))
-                            (body TfExp?)
+                            (body tfexp?)
                             (saved-env environment?)))
 
 ; apply-procedure : Proc × ExpVal → ExpVal
@@ -54,7 +54,7 @@
                  (extend-env (var identifier?) (val expval?) (env environment?))
                  (extend-env-rec** (p-names (list-of identifier?))
                                    (b-varss (list-of (list-of identifier?)))
-                                   (bodies (list-of TfExp?))
+                                   (bodies (list-of tfexp?))
                                    (env environment?)))
 
 (define apply-env
@@ -96,25 +96,23 @@
     (number ("-" digit (arbno digit)) number)))
 
 (define cps-out-grammar-spec
-  '((CpsProgram (TfExp) a-cps-program)
-    (SimpleExp (number) cps-const-exp)
-    (SimpleExp (identifier) cps-var-exp)
-    (SimpleExp ("-" "(" SimpleExp "," SimpleExp ")") cps-diff-exp)
-    (SimpleExp ("zero?" "(" SimpleExp ")") cps-zero?-exp)
-    (SimpleExp ("proc" "(" (separated-list identifier ",") ")" TfExp) cps-proc-exp)
-    (TfExp (SimpleExp) simple-exp->exp)
-    (TfExp ("let" identifier "=" SimpleExp "in" TfExp) cps-let-exp)
-    (TfExp ("letrec"
-            (arbno identifier "(" (separated-list identifier ",") ")" "=" TfExp)
-            "in"
-            TfExp)
+  '((cps-out-program (tfexp) cps-a-program)
+    (simple-expression (number) cps-const-exp)
+    (simple-expression (identifier) cps-var-exp)
+    (simple-expression ("-" "(" simple-expression "," simple-expression ")")
+                       cps-diff-exp)
+    (simple-expression ("zero?" "(" simple-expression ")") cps-zero?-exp)
+    (simple-expression ("+" "(" (separated-list simple-expression ",") ")")
+                       cps-sum-exp)
+    (simple-expression ("proc" "(" (arbno identifier) ")" tfexp) cps-proc-exp)
+    (tfexp (simple-expression) simple-exp->exp)
+    (tfexp ("let" identifier "=" simple-expression "in" tfexp) cps-let-exp)
+    (tfexp ("letrec" (arbno identifier "(" (arbno identifier) ")" "=" tfexp)
+                     "in"
+                     tfexp)
            cps-letrec-exp)
-    (TfExp ("if" SimpleExp "then" TfExp "else" TfExp) cps-if-exp)
-    (TfExp ("(" SimpleExp (arbno SimpleExp) ")") cps-call-exp)))
-
-(define list-cps-out-datatypes
-  (lambda ()
-    (sllgen:list-define-datatypes cps-out-lexical-spec cps-out-grammar-spec)))
+    (tfexp ("if" simple-expression "then" tfexp "else" tfexp) cps-if-exp)
+    (tfexp ("(" simple-expression (arbno simple-expression) ")") cps-call-exp)))
 
 (define scan&parse
   (sllgen:make-string-parser cps-out-lexical-spec cps-out-grammar-spec))
@@ -134,7 +132,7 @@
 (define value-of-simple-exp
   (lambda (simple env)
     (cases
-     SimpleExp
+     simple-expression
      simple
      (cps-const-exp (num) (num-val num))
      (cps-var-exp (var) (apply-env env var))
@@ -143,6 +141,13 @@
                          [val2 (value-of-simple-exp exp2 env)])
                      (let ([num1 (expval->num val1)] [num2 (expval->num val2)])
                        (num-val (- num1 num2)))))
+     (cps-sum-exp
+      (exps)
+      (let ([vals (map (lambda (exp1) (expval->num (value-of-simple-exp exp1 env))) exps)])
+        (let loop ([vals vals] [res 0])
+          (if (null? vals)
+              (num-val res)
+              (loop (cdr vals) (+ res (car vals)))))))
      (cps-zero?-exp (exp1)
                     (let ([val1 (value-of-simple-exp exp1 env)])
                       (let ([num1 (expval->num val1)])
@@ -153,7 +158,7 @@
 (define value-of/k
   (lambda (exp env cont)
     (cases
-     TfExp
+     tfexp
      exp
      (simple-exp->exp (simple)
                       (apply-cont cont (value-of-simple-exp simple env)))
@@ -182,19 +187,21 @@
                 (bool-val #t)
                 (extend-env 'false (bool-val #f) (empty-env)))))
 
-(define value-of-program
+(define value-of-cps-out-program
   (lambda (pgm)
-    (cases CpsProgram
+    (cases cps-out-program
            pgm
-           (a-cps-program (exp1) (value-of/k exp1 (init-env) (end-cont))))))
+           (cps-a-program (exp1) (value-of/k exp1 (init-env) (end-cont))))))
 
-(define run (lambda (code) (value-of-program (scan&parse code))))
+(define run (lambda (code) (value-of-cps-out-program (scan&parse code))))
+
+(provide (all-defined-out))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;test
 (define str0
   "
-  letrec double(x, k)
+  letrec double(x k)
           = if zero?(x) then (k 0) else (double -(x, 1) proc(v0) (k -(v0, -2)))
   in (double 7 proc(x) x)
    ")

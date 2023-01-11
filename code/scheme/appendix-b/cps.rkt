@@ -134,3 +134,18 @@
             (hanoi/k (- n 1) b a c (lambda (v2) (k (append v0 v1 v2))))))))))
 (trace hanoi)
 (trace hanoi/k)
+
+(lambda (f)
+  (lambda (x)
+    (if (< x 2)
+        x
+        (+ (f (- x 1)) (f (- x 2))))))
+
+(lambda (f k)
+  (lambda (x k)
+    (if (< x 2)
+        (k x)
+        (f (- x 1) (lambda (v0)
+                     (f (- x 2)
+                        (lambda (v1)
+                          (k (+ v0 v1)))))))))
