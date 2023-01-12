@@ -102,15 +102,37 @@
 (define inp-exp-simple?
   (lambda (exp)
     (cases
-        expression
-      exp
-      (const-exp (num) #t)
-      (var-exp (var) #t)
-      (diff-exp (exp1 exp2) (and (inp-exp-simple? exp1) (inp-exp-simple? exp2)))
-      (zero?-exp (exp1) (inp-exp-simple? exp1))
-      (proc-exp (ids exp) #t)
-      (sum-exp (exps) (every? inp-exp-simple? exps))
-      (else #f))))
+     expression
+     exp
+     (const-exp (num) #t)
+     (var-exp (var) #t)
+     (diff-exp (exp1 exp2) (and (inp-exp-simple? exp1) (inp-exp-simple? exp2)))
+     (zero?-exp (exp1) (inp-exp-simple? exp1))
+     (proc-exp (ids exp) #t)
+     (sum-exp (exps) (every? inp-exp-simple? exps))
+     (else #f))))
+
+; cps-of-exp : InpExp × SimpleExp → TfExp
+(define cps-of-exp
+  (lambda (exp k-exp)
+    (cases
+     expression
+     exp
+     (const-exp (num) (make-send-to-cont k-exp (cps-const-exp num)))
+     (var-exp (var) (make-send-to-cont k-exp (cps-var-exp var)))
+     (proc-exp (vars body)
+               (make-send-to-cont
+                k-exp
+                (cps-proc-exp (append vars (list 'k%00))
+                              (cps-of-exp body (cps-var-exp 'k%00)))))
+     (zero?-exp (exp1) (cps-of-zero?-exp exp1 k-exp))
+     (diff-exp (exp1 exp2) (cps-of-diff-exp exp1 exp2 k-exp))
+     (sum-exp (exps) (cps-of-sum-exp exps k-exp))
+     (if-exp (exp1 exp2 exp3) (cps-of-if-exp exp1 exp2 exp3 k-exp))
+     (let-exp (var exp1 body) (cps-of-let-exp var exp1 body k-exp))
+     (letrec-exp (p-names b-varss p-bodies letrec-body)
+                 (cps-of-letrec-exp p-names b-varss p-bodies letrec-body k-exp))
+     (call-exp (rator rands) (cps-of-call-exp rator rands k-exp)))))
 
 ; cps-of-sum-exp : Listof(InpExp) × SimpleExp → TfExp
 (define cps-of-sum-exp
@@ -124,18 +146,18 @@
 (define cps-of-simple-exp
   (lambda (exp)
     (cases
-        expression
-      exp
-      (const-exp (num) (cps-const-exp num))
-      (var-exp (var) (cps-var-exp var))
-      (diff-exp (exp1 exp2)
-                (cps-diff-exp (cps-of-simple-exp exp1) (cps-of-simple-exp exp2)))
-      (zero?-exp (exp1) (cps-zero?-exp (cps-of-simple-exp exp1)))
-      (proc-exp (ids exp)
-                (cps-proc-exp (append ids (list 'k%00))
-                              (cps-of-exp exp (cps-var-exp 'k%00))))
-      (sum-exp (exps) (cps-sum-exp (map cps-of-simple-exp exps)))
-      (else (report-invalid-exp-to-cps-of-simple-exp exp)))))
+     expression
+     exp
+     (const-exp (num) (cps-const-exp num))
+     (var-exp (var) (cps-var-exp var))
+     (diff-exp (exp1 exp2)
+               (cps-diff-exp (cps-of-simple-exp exp1) (cps-of-simple-exp exp2)))
+     (zero?-exp (exp1) (cps-zero?-exp (cps-of-simple-exp exp1)))
+     (proc-exp (ids exp)
+               (cps-proc-exp (append ids (list 'k%00))
+                             (cps-of-exp exp (cps-var-exp 'k%00))))
+     (sum-exp (exps) (cps-sum-exp (map cps-of-simple-exp exps)))
+     (else (report-invalid-exp-to-cps-of-simple-exp exp)))))
 
 ; cps-of-call-exp : InpExp × Listof(InpExp) × SimpleExp → TfExp
 (define cps-of-call-exp
@@ -144,28 +166,6 @@
                  (lambda (simples)
                    (cps-call-exp (car simples)
                                  (append (cdr simples) (list k-exp)))))))
-
-; cps-of-exp : InpExp × SimpleExp → TfExp
-(define cps-of-exp
-  (lambda (exp k-exp)
-    (cases
-        expression
-      exp
-      (const-exp (num) (make-send-to-cont k-exp (cps-const-exp num)))
-      (var-exp (var) (make-send-to-cont k-exp (cps-var-exp var)))
-      (proc-exp (vars body)
-                (make-send-to-cont
-                 k-exp
-                 (cps-proc-exp (append vars (list 'k%00))
-                               (cps-of-exp body (cps-var-exp 'k%00)))))
-      (zero?-exp (exp1) (cps-of-zero?-exp exp1 k-exp))
-      (diff-exp (exp1 exp2) (cps-of-diff-exp exp1 exp2 k-exp))
-      (sum-exp (exps) (cps-of-sum-exp exps k-exp))
-      (if-exp (exp1 exp2 exp3) (cps-of-if-exp exp1 exp2 exp3 k-exp))
-      (let-exp (var exp1 body) (cps-of-let-exp var exp1 body k-exp))
-      (letrec-exp (p-names b-varss p-bodies letrec-body)
-                  (cps-of-letrec-exp p-names b-varss p-bodies letrec-body k-exp))
-      (call-exp (rator rands) (cps-of-call-exp rator rands k-exp)))))
 
 ; cps-of-zero?-exp : InpExp × SimpleExp → TfExp
 (define cps-of-zero?-exp
@@ -192,7 +192,7 @@
                                (cps-of-exp exp3 k-exp))))))
 
 ; cps-of-let-exp : Var × InpExp × InpExp × SimpleExp → TfExp
-; (define cps-of-let-exp
+; (define cps-of-let-exp ;;; why this fails?
 ;   (lambda (id rhs body k-exp)
 ;     (cps-of-exps (list rhs)
 ;                  (lambda (simples)
@@ -217,18 +217,19 @@
 (define cps-of-program
   (lambda (pgm)
     (cases program
-      pgm
-      (a-program (exp1)
-                 (cps-a-program (cps-of-exps (list exp1)
-                                             (lambda (new-args)
-                                               (simple-exp->exp
-                                                (car new-args)))))))))
+           pgm
+           (a-program (exp1)
+                      (cps-a-program (cps-of-exps (list exp1)
+                                                  (lambda (new-args) ;;; why this builder?
+                                                    (simple-exp->exp
+                                                     (car new-args)))))))))
+
+(define transform (lambda (str) (cps-of-program (scan&parse-cps-in str))))
+
+(provide transform)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; test
-(define convert
-  (lambda (str)
-    (cps-of-program (scan&parse-cps-in str))))
 
 (define str0
   "letrec equal?(x n) = if zero?(x)
@@ -252,5 +253,10 @@
                                                            then +(22, (f x), 33, (g y 37))
                                                            else (h (f x) -(44, y) (g y 37))
                    in +((p 1), (p 2), (p 3), (p 4), (p 5), (p 73))")
+(check-equal? (value-of-cps-out-program (transform str0)) (num-val 551))
 
-(check-equal? (value-of-cps-out-program (convert str0)) (num-val 551))
+(define str1
+  "let f = proc(x) x
+   in (f 73)")
+(check-equal? (value-of-cps-out-program (transform str1)) (num-val 73))
+

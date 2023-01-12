@@ -143,7 +143,9 @@
                        (num-val (- num1 num2)))))
      (cps-sum-exp
       (exps)
-      (let ([vals (map (lambda (exp1) (expval->num (value-of-simple-exp exp1 env))) exps)])
+      (let ([vals (map (lambda (exp1)
+                         (expval->num (value-of-simple-exp exp1 env)))
+                       exps)])
         (let loop ([vals vals] [res 0])
           (if (null? vals)
               (num-val res)
@@ -162,10 +164,9 @@
      exp
      (simple-exp->exp (simple)
                       (apply-cont cont (value-of-simple-exp simple env)))
-     (cps-let-exp
-      (var rhs body)
-      (let ([val (value-of-simple-exp rhs env)])
-        (value-of/k body (extend-env var val env) cont)))
+     (cps-let-exp (var rhs body)
+                  (let ([val (value-of-simple-exp rhs env)])
+                    (value-of/k body (extend-env var val env) cont)))
      (cps-letrec-exp (p-names b-varss p-bodies letrec-body)
                      (value-of/k letrec-body
                                  (extend-env-rec** p-names b-varss p-bodies env)
@@ -187,13 +188,15 @@
                 (bool-val #t)
                 (extend-env 'false (bool-val #f) (empty-env)))))
 
-(define value-of-cps-out-program
+(define value-of-program
   (lambda (pgm)
     (cases cps-out-program
            pgm
            (cps-a-program (exp1) (value-of/k exp1 (init-env) (end-cont))))))
 
-(define run (lambda (code) (value-of-cps-out-program (scan&parse code))))
+(define run (lambda (code) (value-of-program (scan&parse code))))
+
+(define value-of-cps-out-program value-of-program)
 
 (provide (all-defined-out))
 
