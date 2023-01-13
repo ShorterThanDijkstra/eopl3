@@ -1,9 +1,9 @@
 #lang eopl
 (require racket/format)
+(require racket/string)
 (require rackunit)
 (require "CPS-OUT.rkt")
 (require "CPS-TRANSFORM.rkt")
-(require racket/string)
 (define unparse-simple
   (lambda (simple)
     (cases

@@ -1,5 +1,7 @@
 #lang eopl
 (require rackunit)
+(require racket/format)
+(require racket/string)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Procedure data type
 (define-datatype proc
@@ -211,6 +213,80 @@
 
 (define value-of-cps-out-program value-of-program)
 
+(define unparse-simple
+  (lambda (simple)
+    (cases
+        simple-expression
+      simple
+      (cps-const-exp (num) (~a num))
+      (cps-var-exp (var) (~a var))
+      (cps-diff-exp (exp1 exp2)
+                    (~a "-" "(" (unparse-simple exp1) ", " (unparse-simple exp2) ")"))
+      (cps-sum-exp
+       (exps)
+       (let ([unparsed (map unparse-simple exps)])
+         (if (null? unparsed)
+             "+()"
+             (let loop ([rest (cdr unparsed)]
+                        [res (~a "+(" (car unparsed))])
+               (if (null? rest)
+                   (~a res ")")
+                   (loop (cdr rest) (~a res ", " (car rest))))))))
+      (cps-list-exp (exps)
+                    (let ([unparsed (map unparse-simple exps)])
+                      (if (null? unparsed)
+                          "list()"
+                          (let loop ([rest (cdr unparsed)]
+                                     [res (~a "list(" (car unparsed))])
+                            (if (null? rest)
+                                (~a res ")")
+                                (loop (cdr rest) (~a res ", " (car rest))))))))
+      (cps-zero?-exp (exp1)
+                     (~a "zero?" "(" (unparse-simple exp1) ")"))
+      (cps-proc-exp (vars body) (~a "proc" (~a vars) " " (unparse-tf body))))))
+
+(define unparse-tf
+  (lambda (exp)
+    (cases
+        tfexp
+      exp
+      (simple-exp->exp (simple)
+                       (unparse-simple simple))
+      (cps-let-exp (var rhs body)
+                   (~a "let" " " var " = " (unparse-simple rhs) " in " (unparse-tf body) " "))
+      (cps-letrec-exp (p-names b-varss p-bodies letrec-body)
+                      (let ((unparsed-procs (map
+                                             (lambda (p-name b-vars p-body)
+                                               (~a p-name b-vars " = " (unparse-tf p-body)))
+                                             p-names b-varss p-bodies)))
+                        (let loop ([unparsed-procs unparsed-procs]
+                                   [res "letrec "])
+                          (if (null? unparsed-procs)
+                              (~a res " in " (unparse-tf letrec-body) " ")
+                              (loop (cdr unparsed-procs) (~a res (car unparsed-procs) "\n"))))))
+
+
+      (cps-if-exp (simple1 body1 body2)
+                  (~a " if " (unparse-simple simple1)
+                      " then " (unparse-tf body1)
+                      " else " (unparse-tf body2)))
+      (cps-call-exp
+       (rator rands)
+       (let ([unparsed-rator (unparse-simple rator)]
+             [unparsed-rands (map unparse-simple rands)])
+         (let loop ([unparsed-rands unparsed-rands]
+                    [res (~a "(" unparsed-rator)])
+           (if (null? unparsed-rands)
+               (~a res ")")
+               (loop (cdr unparsed-rands) (~a res " " (car unparsed-rands))))))))))
+
+(define unparse
+  (lambda (pgm)
+    (cases cps-out-program
+      pgm
+      (cps-a-program (exp1)
+                     (let ((unparsed (unparse-tf exp1)))
+                       (string-replace unparsed "%" ""))))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Helper Functions
 (define list-set
@@ -297,6 +373,10 @@
     (let cps-of-rest ([exps exps])
       ;   cps-of-rest : Listof(InpExp) → TfExp
       (let ([pos (list-index (lambda (exp) (not (inp-exp-simple? exp))) exps)])
+        ; (when pos
+        ;   (display (list-ref exps pos))
+        ;   (newline)
+        ;   (newline))
         (if (not pos)
             (builder (map cps-of-simple-exp exps))
             (let ([var (fresh-identifier 'var)])
@@ -318,6 +398,7 @@
       (zero?-exp (exp1) (inp-exp-simple? exp1))
       (proc-exp (ids exp) #t)
       (sum-exp (exps) (every? inp-exp-simple? exps))
+      (list-exp (exps) (every? inp-exp-simple? exps))
       (else #f))))
 
 ; cps-of-exp : InpExp × SimpleExp → TfExp
@@ -373,6 +454,7 @@
                 (cps-proc-exp (append ids (list 'k%00))
                               (cps-of-exp exp (cps-var-exp 'k%00))))
       (sum-exp (exps) (cps-sum-exp (map cps-of-simple-exp exps)))
+      (list-exp (exps) (cps-list-exp (map cps-of-simple-exp exps)))
       (else (report-invalid-exp-to-cps-of-simple-exp exp)))))
 
 ; cps-of-call-exp : InpExp × Listof(InpExp) × SimpleExp → TfExp
@@ -493,11 +575,10 @@
    in list(73, true, list((f 73), 37))")
 
 #|
-let f = proc(x k) (k x)
-in (f 73 proc(v0) list(73, true, list(v0, 37))
+list(73, true, list((f 73), 37))
+=> (f 73 proc(v0) (proc(x) x list(73, true, list(v0, 37)))); wrong, but it is cps
+=> (f 73 proc(v0) (proc(v1) (proc(x) x list(73, true, v1)) list(v0, 37))) ;correct
 |#
 ; (scan&parse str3) ; should fail
 (check-equal? (value-of-cps-out-program (transform str3))
               (list-val (list (num-val 73) (bool-val #t) (list-val (list (num-val 73) (num-val 37))))))
-
-
