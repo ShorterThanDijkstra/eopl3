@@ -17,7 +17,7 @@
            proc1
            (procedure (vars body saved-env)
                       (value-of/k body
-                                  (extend-env* vars (map newref args) saved-env)
+                                  (extend-env* vars args saved-env)
                                   cont)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -105,7 +105,7 @@
  environment
  environment?
  (empty-env)
- (extend-env (var identifier?) (ref reference?) (env environment?))
+ (extend-env (var identifier?) (val expval?) (env environment?))
  (extend-env-rec** (p-names (list-of identifier?))
                    (b-varss (list-of (list-of identifier?)))
                    (bodies (list-of tfexp?))
@@ -117,9 +117,9 @@
      environment
      env
      (empty-env () (eopl:error 'apply-env))
-     (extend-env (saved-var saved-ref saved-env)
+     (extend-env (saved-var saved-val saved-env)
                  (if (eqv? saved-var search-var)
-                     saved-ref
+                     saved-val
                      (apply-env saved-env search-var)))
      (extend-env-rec**
       (p-names b-varss p-bodies saved-env)
@@ -127,7 +127,7 @@
         (if (null? p-names)
             (apply-env saved-env search-var)
             (if (eqv? (car p-names) search-var)
-                (newref (proc-val (procedure (car b-varss) (car p-bodies) env)))
+                (proc-val (procedure (car b-varss) (car p-bodies) env))
                 (search (cdr p-names) (cdr b-varss) (cdr p-bodies)))))))))
 
 (define extend-env*
@@ -200,7 +200,7 @@
      simple-expression
      simple
      (cps-const-exp (num) (num-val num))
-     (cps-var-exp (var) (deref (apply-env env var)))
+     (cps-var-exp (var) (apply-env env var))
      (cps-diff-exp (exp1 exp2)
                    (let ([val1 (value-of-simple-exp exp1 env)]
                          [val2 (value-of-simple-exp exp2 env)])
@@ -231,7 +231,7 @@
                       (apply-cont cont (value-of-simple-exp simple env)))
      (cps-let-exp (var rhs body)
                   (let ([val (value-of-simple-exp rhs env)])
-                    (value-of/k body (extend-env var (newref val) env) cont)))
+                    (value-of/k body (extend-env var val env) cont)))
      (cps-letrec-exp (p-names b-varss p-bodies letrec-body)
                      (value-of/k letrec-body
                                  (extend-env-rec** p-names b-varss p-bodies env)
@@ -274,8 +274,8 @@
 (define init-env
   (lambda ()
     (extend-env 'true
-                (newref (bool-val #t))
-                (extend-env 'false (newref (bool-val #f)) (empty-env)))))
+                (bool-val #t)
+                (extend-env 'false (bool-val #f) (empty-env)))))
 
 (define value-of-program
   (lambda (pgm)
