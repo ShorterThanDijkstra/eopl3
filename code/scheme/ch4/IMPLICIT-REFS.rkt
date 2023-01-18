@@ -398,3 +398,4 @@ in let a = 3
 in begin (p a); a end")
 (check-equal? (run str5) (num-val 3))
 
+

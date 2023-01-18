@@ -14,28 +14,31 @@
 (define cps-in-grammar-spec
   '((program (expression) a-program)
     (expression (number) const-exp)
-    (expression (identifier) var-exp)
+    (expression (identifier) var-exp) ; deref
     (expression ("-" "(" expression "," expression ")") diff-exp)
     (expression ("+" "(" (separated-list expression ",") ")") sum-exp)
     (expression ("zero?" "(" expression ")") zero?-exp)
     (expression ("if" expression "then" expression "else" expression) if-exp)
-    (expression ("let" identifier "=" expression "in" expression) let-exp)
+    (expression ("let" identifier "=" expression "in" expression) let-exp) ; newref
     (expression
      ("letrec" (arbno identifier "(" (arbno identifier) ")" "=" expression)
                "in"
-               expression)
+               expression) ; newref
      letrec-exp)
     (expression ("proc" "(" (arbno identifier) ")" expression) proc-exp)
     (expression ("print" "(" expression ")") print-exp)
-    (expression ("newref" "(" expression ")") newref-exp)
-    (expression ("deref" "(" expression ")") deref-exp)
-    (expression ("setref" "(" expression "," expression ")") setref-exp)
-    (expression ("(" expression (arbno expression) ")") call-exp)))
+    (expression ("set" identifier "=" expression) assign-exp) ; setref
+    (expression ("(" expression (arbno expression) ")") call-exp) ; newref
+    ))
 
 (define scan&parse-cps-in
   (sllgen:make-string-parser cps-in-lexical-spec cps-in-grammar-spec))
 
 (sllgen:make-define-datatypes cps-in-lexical-spec cps-in-grammar-spec)
+
+(define list-the-datatypes
+  (lambda ()
+    (sllgen:list-define-datatypes cps-in-lexical-spec cps-in-grammar-spec)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Helper Functions
@@ -90,17 +93,23 @@
 ; cps-of-exps : Listof(InpExp) × (Listof(InpExp) → TfExp) → TfExp
 (define cps-of-exps
   (lambda (exps builder)
-    (let cps-of-rest ([exps exps])
-      ;   cps-of-rest : Listof(InpExp) → TfExp
-      (let ([pos (list-index (lambda (exp) (not (inp-exp-simple? exp))) exps)])
-        (if (not pos)
-            (builder (map cps-of-simple-exp exps))
-            (let ([var (fresh-identifier 'var)])
-              (cps-of-exp (list-ref exps pos)
-                          (cps-proc-exp
-                           (list var)
-                           (cps-of-rest
-                            (list-set exps pos (var-exp var)))))))))))
+    (let cps-of-rest ((exps exps) (acc '()))
+      ; cps-of-rest : Listof(InpExp) × Listof(SimpleExp) → TfExp
+      (cond
+        ((null? exps) (builder (reverse acc)))
+        ((inp-exp-simple? (car exps))
+         (cps-of-rest (cdr exps)
+                      (cons
+                       (cps-of-simple-exp (car exps))
+                       acc)))
+        (else
+         (let ((var (fresh-identifier 'var)))
+           (cps-of-exp (car exps)
+                       (cps-proc-exp (list var)
+                                     (cps-of-rest (cdr exps)
+                                                  (cons
+                                                   (cps-of-simple-exp (var-exp var))
+                                                   acc))))))))))
 
 ; inp-exp-simple? : InpExp → Bool
 (define inp-exp-simple?
@@ -109,7 +118,7 @@
         expression
       exp
       (const-exp (num) #t)
-      (var-exp (var) #t)
+      ; (var-exp (var) #t)
       (diff-exp (exp1 exp2) (and (inp-exp-simple? exp1) (inp-exp-simple? exp2)))
       (zero?-exp (exp1) (inp-exp-simple? exp1))
       (proc-exp (ids exp) #t)
@@ -123,7 +132,7 @@
         expression
       exp
       (const-exp (num) (make-send-to-cont k-exp (cps-const-exp num)))
-      (var-exp (var) (make-send-to-cont k-exp (cps-var-exp var)))
+      (var-exp (var) (cps-of-var-exp var k-exp))
       (proc-exp (vars body)
                 (make-send-to-cont
                  k-exp
@@ -136,36 +145,37 @@
       (let-exp (var exp1 body) (cps-of-let-exp var exp1 body k-exp))
       (letrec-exp (p-names b-varss p-bodies letrec-body)
                   (cps-of-letrec-exp p-names b-varss p-bodies letrec-body k-exp))
-       ;; new for cps-side-effects-lang
-        ;; Page: 228
-        (print-exp (rator)
-          (cps-of-exps (list rator)
-            (lambda (simples)
-              (cps-print-exp
-                (car simples)
-                (make-send-to-cont k-exp (cps-const-exp 38))))))
-
-        ;; Page 231
-        (newref-exp (exp1)
-          (cps-of-exps (list exp1)
-            (lambda (simples)
-              (cps-newref-exp (car simples) k-exp))))
-
-        (deref-exp (exp1)
-          (cps-of-exps (list exp1)
-            (lambda (simples)
-              (cps-deref-exp (car simples) k-exp))))
-
-        (setref-exp (exp1 exp2)
-          (cps-of-exps (list exp1 exp2)
-            (lambda (simples)
-              (cps-setref-exp 
-                (car simples)
-                (cadr simples)
-                ;; the third argument will be evaluated tail-recursively.
-                ;; returns 23, just like in explicit-refs
-                (make-send-to-cont k-exp (cps-const-exp 23))))))
+      (print-exp (rator)
+                 (cps-of-print-exp rator k-exp))
+      (assign-exp (var exp1) (cps-of-assign-exp var exp1 k-exp))
       (call-exp (rator rands) (cps-of-call-exp rator rands k-exp)))))
+
+(define cps-of-var-exp
+  (lambda (var k-exp)
+    (cps-deref-exp (cps-var-exp var) k-exp)))
+
+#|
+set x = 17
+
+setref(x, 17); k
+=>
+
+|#
+(define cps-of-assign-exp
+  (lambda (var exp1 k-exp)
+    (cps-of-exps (list exp1)
+                 (lambda (simples)
+                   (cps-setref-exp (cps-var-exp var)
+                                   (car simples)
+                                   (make-send-to-cont k-exp (cps-const-exp 23)))))))
+
+(define cps-of-print-exp
+  (lambda (rator k-exp)
+    (cps-of-exps (list rator)
+                 (lambda (simples)
+                   (cps-print-exp
+                    (car simples)
+                    (make-send-to-cont k-exp (cps-const-exp 38)))))))
 
 ; cps-of-sum-exp : Listof(InpExp) × SimpleExp → TfExp
 (define cps-of-sum-exp
@@ -193,12 +203,29 @@
       (else (report-invalid-exp-to-cps-of-simple-exp exp)))))
 
 ; cps-of-call-exp : InpExp × Listof(InpExp) × SimpleExp → TfExp
+; (define cps-of-call-exp
+  ; (lambda (rator rands k-exp)
+    ; (cps-of-exps (cons rator rands)
+                ;  (lambda (simples)
+                  ;  (cps-call-exp (car simples)
+                                ;  (append (cdr simples) (list k-exp)))))))
+
+;;; copy from https://github.com/EFanZh/EOPL-Exercises/blob/master/solutions/exercise-6.37.rkt
 (define cps-of-call-exp
   (lambda (rator rands k-exp)
     (cps-of-exps (cons rator rands)
                  (lambda (simples)
-                   (cps-call-exp (car simples)
-                                 (append (cdr simples) (list k-exp)))))))
+                   (define rator-simple (car simples))
+                   (let loop ([acc '()]
+                              [rands (cdr simples)])
+                     (if (null? rands)
+                         (cps-call-exp rator-simple (reverse (cons k-exp acc)))
+                         (let ([var (fresh-identifier 'var)])
+                           (cps-newref-exp (car rands)
+                                           (cps-proc-exp (list var)
+                                                         (loop (cons (cps-var-exp var) acc)
+                                                               (cdr rands)))))))))))
+
 
 ; cps-of-zero?-exp : InpExp × SimpleExp → TfExp
 (define cps-of-zero?-exp
@@ -232,19 +259,48 @@
 ;                    (cps-let-exp id
 ;                                 (car simples)
 ;                                 (cps-of-exp body k-exp))))))
+; (define cps-of-let-exp
+;   (lambda (id rhs body k-exp)
+; (cps-of-exp (call-exp (proc-exp (list id) body) (list rhs)) k-exp)))
 (define cps-of-let-exp
   (lambda (id rhs body k-exp)
-    (cps-of-exp (call-exp (proc-exp (list id) body) (list rhs)) k-exp)))
+    (cps-of-exps (list rhs)
+                 (lambda (simples)
+                   (cps-newref-exp  (car simples)
+                                    (cps-proc-exp (list id)
+                                                  (cps-of-exp body k-exp)))))))
 
 ; cps-of-letrec-exp :
 ; Listof(Listof(Var)) * Listof(InpExp) * InpExp * SimpleExp -> TfExp
+; (define cps-of-letrec-exp
+; (lambda (p-names b-varss p-bodies letrec-body k-exp)
+; (cps-letrec-exp
+;  p-names
+;  (map (lambda (b-vars) (append b-vars (list 'k%00))) b-varss)
+;  (map (lambda (p-body) (cps-of-exp p-body (cps-var-exp 'k%00))) p-bodies)
+;  (cps-of-exp letrec-body k-exp))))
+
 (define cps-of-letrec-exp
   (lambda (p-names b-varss p-bodies letrec-body k-exp)
-    (cps-letrec-exp
-     p-names
-     (map (lambda (b-vars) (append b-vars (list 'k%00))) b-varss)
-     (map (lambda (p-body) (cps-of-exp p-body (cps-var-exp 'k%00))) p-bodies)
-     (cps-of-exp letrec-body k-exp))))
+    (define uninitialized (cps-const-exp -1))
+    (let loop-newref-names ([names p-names])
+      (if (null? names)
+          (let loop-setref-names ([names p-names]
+                                  [varss (map (lambda (b-vars) (append b-vars (list 'k%00))) b-varss)]
+                                  [bodies (map (lambda (p-body) (cps-of-exp p-body (cps-var-exp 'k%00))) p-bodies)])
+            (if (null? names)
+                (cps-of-exp letrec-body k-exp)
+                (cps-setref-exp (cps-var-exp (car names))
+                                (cps-proc-exp (car varss)
+                                              (car bodies))
+                                (loop-setref-names (cdr names)
+                                                   (cdr varss)
+                                                   (cdr bodies)))))
+          (cps-newref-exp uninitialized
+                          (cps-proc-exp (list (car names))
+                                        (loop-newref-names (cdr names))))))))
+
+
 
 ; cps-of-program : InpExp → TfExp
 (define cps-of-program
@@ -257,7 +313,8 @@
                                                (simple-exp->exp
                                                 (car new-args)))))))))
 
-(define transform (lambda (str) (cps-of-program (scan&parse-cps-in str))))
+(define transform (lambda (str)
+                    (cps-of-program (scan&parse-cps-in str))))
 
 (provide transform)
 
@@ -291,29 +348,101 @@
 (define str1
   "let f = proc(x) x
    in (f 73)")
-
+#|
+newref(proc(x k) deref(x, k), proc(f) deref(f, proc(v0) (v0 73 proc(x) x)))
+newref(proc(x k) deref(x, k), proc(f) deref(f, proc(v0) newref(33, proc(v1) (v0 v1 proc(x) x))))
+|#
 (check-equal? (value-of-cps-out-program (transform str1)) (num-val 73))
+
 (define str2
-  "let loc1 = newref(33)
-   in let loc2 = newref(44)
-      in let void = setref(loc1, 22)
-         in -(deref(loc1), 1)")
-(check-equal? (value-of-cps-out-program (transform str2)) (num-val 21))
+  "let loc1 = 33
+   in let loc2 = 44
+      in let void = set loc1 = 22
+         in -(loc1, loc2)")
+(check-equal? (value-of-cps-out-program (transform str2)) (num-val -22))
+
+#|
+let loc1 = 33
+in let loc2 = 44
+   in let void = set loc1 = 22
+      in -(loc1, loc2)
+
+===============================================================
+let loc1 = newref(33)
+in let val = 44
+   in let void = setref(loc1, 22)
+      in -(deref(loc1), val)
+
+newref(33, proc(loc1)
+             let val1 = 44
+             in setref(loc1, 22);
+                deref(loc1, proc(val2)
+                            -(val2, val1)))
+
+===============================================================
+let loc1 = newref(33)
+    in let loc2 = newref(44)
+       in let void = setref(loc1, 22)
+          in -(deref(loc1), deref(loc2))
+
+newref(33, proc(loc1)
+              newref(44, proc(loc2)
+                            setref(loc1, 22);
+                            deref(loc1, proc (val1)
+                                            deref(loc2, proc(val2)
+                                                          -(val1, val2)))))
+|#
 
 (define str3
-  "let x = newref(22)
-   in let f = proc (z) let zz = newref(-(z,deref(x)))
-                       in deref(zz)
+  "let x = 22
+   in let f = proc (z) let zz = -(z, x)
+                       in zz
       in -((f 66), (f 55))")
+
 (check-equal? (value-of-cps-out-program (transform str3)) (num-val 11))
 
 (define str4
-  "let g = let counter = newref(0)
+  "let g = let counter = 0
            in proc (dummy)
-                let void = setref(counter, -(deref(counter), -1))
-                in  deref(counter)
+                let void = set counter = -(counter, -1)
+                in  counter
   in let a = (g 11)
      in let b = (g 11)
         in -(a,b)")
 (check-equal? (value-of-cps-out-program (transform str4)) (num-val -1))
 
+(define str5
+  "
+  letrec double(x)
+          = if zero?(x) then 0 else -((double -(x, 1)), -2)
+  in (double 6)
+   ")
+ (check-equal? (value-of-cps-out-program (transform str5)) (num-val 12))
+
+(define str6
+  "letrec foo() = (foo)
+   in (foo)")
+(transform str6)
+#|
+newref(-1, proc(foo) setref(foo, proc(k) deref(foo, proc(v0) (k v0))); deref(foo, proc(v1) (v1 proc(x) x)))
+|#
+
+(define str7
+  "letrec foo(x) = (foo -(x, 1))
+   in (foo 37)")
+(transform str7)
+#|
+newref(-1,
+       proc(foo)
+         setref(foo,
+                proc(x k00)
+                  deref(foo,
+                        proc(var6)
+                          deref(x,
+                                proc(var8)
+                                newref(1,
+                                       proc(var9)
+                                         (proc(var7) (var6 var7 k00) -(var8, var9))))));
+          deref(foo, proc(var10) newref(37, proc(var11) (var10 var11 proc(var5) var5))))
+
+|#

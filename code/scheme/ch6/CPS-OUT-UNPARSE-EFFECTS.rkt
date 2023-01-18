@@ -156,3 +156,6 @@
          in -(deref(loc1), 1)")
 (unparse (transform str5))
 
+(define str6
+  "newref(-1, proc(double) setref(double, proc(x k00) deref(x, proc(var143) (proc(var136)  if var136 then newref(0, k00) else deref(double, proc(var139) deref(x, proc(var141) newref(1, proc(var142) (proc(var140) (var139 var140 proc(var137) newref(-2, proc(var138) (k00 -(var137, var138)))) -(var141, var142))))) zero?(var143)))); deref(double, proc(var144) newref(6, proc(var145) (var144 var145 proc(var135) var135))))"
+)

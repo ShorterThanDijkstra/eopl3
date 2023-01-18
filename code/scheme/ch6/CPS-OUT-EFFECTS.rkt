@@ -5,64 +5,66 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Procedure data type
 (define-datatype proc
-                 proc?
-                 (procedure (vars (list-of identifier?))
-                            (body tfexp?)
-                            (saved-env environment?)))
+  proc?
+  (procedure (vars (list-of identifier?))
+             (body tfexp?)
+             (saved-env environment?)))
 
 ; apply-procedure : Proc × ExpVal → ExpVal
 (define apply-procedure/k
   (lambda (proc1 args cont)
     (cases proc
-           proc1
-           (procedure (vars body saved-env)
-                      (value-of/k body
-                                  (extend-env* vars args saved-env)
-                                  cont)))))
+      proc1
+      (procedure (vars body saved-env)
+                 (value-of/k body
+                             (extend-env* vars args saved-env)
+                             cont)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; ExpVal data type
 (define-datatype expval
-                 expval?
-                 (num-val (value number?))
-                 (bool-val (boolean boolean?))
-                 (proc-val (proc proc?))
-                 (ref-val (val reference?)))
+  expval?
+  (num-val (value number?))
+  (bool-val (boolean boolean?))
+  (proc-val (proc proc?))
+  (ref-val (val reference?)))
 
 (define expval->num
-  (lambda (v) (cases expval v (num-val (num) num) (else (eopl:error)))))
+  (lambda (v) (cases expval v (num-val (num) num) (else (begin (display (deref (expval->ref v)))
+                                                               (newline)
+                                                               (eopl:error 'expval->num "~s" v))))))
 
 (define expval->bool
-  (lambda (v) (cases expval v (bool-val (bool) bool) (else (eopl:error)))))
+  (lambda (v) (cases expval v (bool-val (bool) bool) (else (eopl:error 'expval->bool "~s" v)))))
 
 (define expval->proc
-  (lambda (v) (cases expval v (proc-val (proc) proc) (else (eopl:error)))))
+  (lambda (v) (cases expval v (proc-val (proc) proc) (else (eopl:error 'expval->proc "~s" v)))))
 
 (define expval->ref
   (lambda (v)
     (cases expval
-           v
-           (ref-val (ref) ref)
-           (else ((eopl:error 'expval->ref "~s" v))))))
+      v
+      (ref-val (ref) ref)
+      (else (eopl:error 'expval->ref "~s" v)))))
 
 (define expval->scheme-val
   (lambda (v)
     (cases expval
-           v
-           (num-val (num) num)
-           (bool-val (bool) bool)
-           (proc-val (proc) proc)
-           (ref-val (ref) ref))))
+      v
+      (num-val (num) num)
+      (bool-val (bool) bool)
+      (proc-val (proc) proc)
+      (ref-val (ref) ref))))
 
 (define expval->string
   (lambda (v)
     (cases expval
-           v
-           (num-val (num) (number->string num))
-           (bool-val (bool) (~a bool))
-           (proc-val (proc) "<procedure>")
-           (ref-val (ref) "<ref>"))))
+      v
+      (num-val (num) (number->string num))
+      (bool-val (bool) (~a bool))
+      (proc-val (proc) "<procedure>")
+      (ref-val (ref) "<ref>"))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Store
@@ -102,33 +104,33 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Env
 (define-datatype
- environment
- environment?
- (empty-env)
- (extend-env (var identifier?) (val expval?) (env environment?))
- (extend-env-rec** (p-names (list-of identifier?))
-                   (b-varss (list-of (list-of identifier?)))
-                   (bodies (list-of tfexp?))
-                   (env environment?)))
+  environment
+  environment?
+  (empty-env)
+  (extend-env (var identifier?) (val expval?) (env environment?))
+  (extend-env-rec** (p-names (list-of identifier?))
+                    (b-varss (list-of (list-of identifier?)))
+                    (bodies (list-of tfexp?))
+                    (env environment?)))
 
 (define apply-env
   (lambda (env search-var)
     (cases
-     environment
-     env
-     (empty-env () (eopl:error 'apply-env))
-     (extend-env (saved-var saved-val saved-env)
-                 (if (eqv? saved-var search-var)
-                     saved-val
-                     (apply-env saved-env search-var)))
-     (extend-env-rec**
-      (p-names b-varss p-bodies saved-env)
-      (let search ([p-names p-names] [b-varss b-varss] [p-bodies p-bodies])
-        (if (null? p-names)
-            (apply-env saved-env search-var)
-            (if (eqv? (car p-names) search-var)
-                (proc-val (procedure (car b-varss) (car p-bodies) env))
-                (search (cdr p-names) (cdr b-varss) (cdr p-bodies)))))))))
+        environment
+      env
+      (empty-env () (eopl:error 'apply-env "~s" search-var))
+      (extend-env (saved-var saved-val saved-env)
+                  (if (eqv? saved-var search-var)
+                      saved-val
+                      (apply-env saved-env search-var)))
+      (extend-env-rec**
+       (p-names b-varss p-bodies saved-env)
+       (let search ([p-names p-names] [b-varss b-varss] [p-bodies p-bodies])
+         (if (null? p-names)
+             (apply-env saved-env search-var)
+             (if (eqv? (car p-names) search-var)
+                 (proc-val (procedure (car b-varss) (car p-bodies) env))
+                 (search (cdr p-names) (cdr b-varss) (cdr p-bodies)))))))))
 
 (define extend-env*
   (lambda (vars refs env)
@@ -197,79 +199,79 @@
 (define value-of-simple-exp
   (lambda (simple env)
     (cases
-     simple-expression
-     simple
-     (cps-const-exp (num) (num-val num))
-     (cps-var-exp (var) (apply-env env var))
-     (cps-diff-exp (exp1 exp2)
-                   (let ([val1 (value-of-simple-exp exp1 env)]
-                         [val2 (value-of-simple-exp exp2 env)])
-                     (let ([num1 (expval->num val1)] [num2 (expval->num val2)])
-                       (num-val (- num1 num2)))))
-     (cps-sum-exp
-      (exps)
-      (let ([vals (map (lambda (exp1)
-                         (expval->num (value-of-simple-exp exp1 env)))
-                       exps)])
-        (let loop ([vals vals] [res 0])
-          (if (null? vals)
-              (num-val res)
-              (loop (cdr vals) (+ res (car vals)))))))
-     (cps-zero?-exp (exp1)
-                    (let ([val1 (value-of-simple-exp exp1 env)])
-                      (let ([num1 (expval->num val1)])
-                        (if (zero? num1) (bool-val #t) (bool-val #f)))))
-     (cps-proc-exp (vars body) (proc-val (procedure vars body env))))))
+        simple-expression
+      simple
+      (cps-const-exp (num) (num-val num))
+      (cps-var-exp (var) (apply-env env var))
+      (cps-diff-exp (exp1 exp2)
+                    (let ([val1 (value-of-simple-exp exp1 env)]
+                          [val2 (value-of-simple-exp exp2 env)])
+                      (let ([num1 (expval->num val1)] [num2 (expval->num val2)])
+                        (num-val (- num1 num2)))))
+      (cps-sum-exp
+       (exps)
+       (let ([vals (map (lambda (exp1)
+                          (expval->num (value-of-simple-exp exp1 env)))
+                        exps)])
+         (let loop ([vals vals] [res 0])
+           (if (null? vals)
+               (num-val res)
+               (loop (cdr vals) (+ res (car vals)))))))
+      (cps-zero?-exp (exp1)
+                     (let ([val1 (value-of-simple-exp exp1 env)])
+                       (let ([num1 (expval->num val1)])
+                         (if (zero? num1) (bool-val #t) (bool-val #f)))))
+      (cps-proc-exp (vars body) (proc-val (procedure vars body env))))))
 
 ; value-of/k : TfExp × Env × Cont → FinalAnswer
 (define value-of/k
   (lambda (exp env cont)
     (cases
-     tfexp
-     exp
-     (simple-exp->exp (simple)
-                      (apply-cont cont (value-of-simple-exp simple env)))
-     (cps-let-exp (var rhs body)
-                  (let ([val (value-of-simple-exp rhs env)])
-                    (value-of/k body (extend-env var val env) cont)))
-     (cps-letrec-exp (p-names b-varss p-bodies letrec-body)
-                     (value-of/k letrec-body
-                                 (extend-env-rec** p-names b-varss p-bodies env)
-                                 cont))
-     (cps-if-exp (simple1 body1 body2)
-                 (if (expval->bool (value-of-simple-exp simple1 env))
-                     (value-of/k body1 env cont)
-                     (value-of/k body2 env cont)))
-     (cps-print-exp (simple body)
-                    (begin
-                      (display (expval->string
-                                (value-of-simple-exp simple env)))
-                      (newline)
-                      (value-of/k body env cont)))
-     (cps-newref-exp
-      (simple1 simple2)
-      (let ([val1 (value-of-simple-exp simple1 env)]
-            [val2 (value-of-simple-exp simple2 env)])
-        (let ([newval (ref-val (newref val1))])
-          (apply-procedure/k (expval->proc val2) (list newval) cont))))
-     (cps-deref-exp
-      (simple1 simple2)
-      (apply-procedure/k
-       (expval->proc (value-of-simple-exp simple2 env))
-       (list (deref (expval->ref (value-of-simple-exp simple1 env))))
-       cont))
-     (cps-setref-exp (simple1 simple2 body)
-                     (let ([ref (expval->ref (value-of-simple-exp simple1 env))]
-                           [val (value-of-simple-exp simple2 env)])
-                       (begin
-                         (setref! ref val)
-                         (value-of/k body env cont))))
-     (cps-call-exp
-      (rator rands)
-      (let ([rator-proc (expval->proc (value-of-simple-exp rator env))]
-            [rand-vals
-             (map (lambda (simple) (value-of-simple-exp simple env)) rands)])
-        (apply-procedure/k rator-proc rand-vals cont))))))
+        tfexp
+      exp
+      (simple-exp->exp (simple)
+                       (apply-cont cont (value-of-simple-exp simple env)))
+      (cps-let-exp (var rhs body)
+                   (let ([val (value-of-simple-exp rhs env)])
+                     (value-of/k body (extend-env var val env) cont)))
+      (cps-letrec-exp (p-names b-varss p-bodies letrec-body)
+                      (value-of/k letrec-body
+                                  (extend-env-rec** p-names b-varss p-bodies env)
+                                  cont))
+      (cps-if-exp (simple1 body1 body2)
+                  (if (expval->bool (value-of-simple-exp simple1 env))
+                      (value-of/k body1 env cont)
+                      (value-of/k body2 env cont)))
+      (cps-print-exp (simple body)
+                     (begin
+                       (display (expval->string
+                                 (value-of-simple-exp simple env)))
+                       (newline)
+                       (value-of/k body env cont)))
+      (cps-newref-exp
+       (simple1 simple2)
+       (let ([val1 (value-of-simple-exp simple1 env)]
+             [val2 (value-of-simple-exp simple2 env)])
+         (let ([newval (ref-val (newref val1))])
+           (apply-procedure/k (expval->proc val2) (list newval) cont))))
+      (cps-deref-exp
+       (simple1 simple2)
+       (apply-procedure/k
+        (expval->proc (value-of-simple-exp simple2 env))
+        (list (deref (expval->ref (value-of-simple-exp simple1 env))))
+        cont))
+      (cps-setref-exp (simple1 simple2 body)
+                      (let ([ref (expval->ref (value-of-simple-exp simple1 env))]
+                            [val (value-of-simple-exp simple2 env)])
+                        (begin
+                          (setref! ref val)
+                          (value-of/k body env cont))))
+      (cps-call-exp
+       (rator rands)
+       (let ([rator-proc (expval->proc (value-of-simple-exp rator env))]
+             [rand-vals
+              (map (lambda (simple) (value-of-simple-exp simple env)) rands)])
+         (apply-procedure/k rator-proc rand-vals cont))))))
 
 (define init-env
   (lambda ()
@@ -281,8 +283,8 @@
   (lambda (pgm)
     (initialize-store!)
     (cases cps-out-program
-           pgm
-           (cps-a-program (exp1) (value-of/k exp1 (init-env) (end-cont))))))
+      pgm
+      (cps-a-program (exp1) (value-of/k exp1 (init-env) (end-cont))))))
 
 (define run (lambda (code) (value-of-program (scan&parse code))))
 
