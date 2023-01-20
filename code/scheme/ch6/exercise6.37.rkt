@@ -158,8 +158,6 @@
 set x = 17
 
 setref(x, 17); k
-=>
-
 |#
 (define cps-of-assign-exp
   (lambda (var exp1 k-exp)
@@ -210,7 +208,7 @@ setref(x, 17); k
                   ;  (cps-call-exp (car simples)
                                 ;  (append (cdr simples) (list k-exp)))))))
 
-;;; copy from https://github.com/EFanZh/EOPL-Exercises/blob/master/solutions/exercise-6.37.rkt
+;;; copied from https://github.com/EFanZh/EOPL-Exercises/blob/master/solutions/exercise-6.37.rkt
 (define cps-of-call-exp
   (lambda (rator rands k-exp)
     (cps-of-exps (cons rator rands)

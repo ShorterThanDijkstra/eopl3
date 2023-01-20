@@ -192,7 +192,7 @@
                                (cps-of-exp exp3 k-exp))))))
 
 ; cps-of-let-exp : Var × InpExp × InpExp × SimpleExp → TfExp
-; (define cps-of-let-exp ;;; why this fails?
+; (define cps-of-let-exp ;;; why this fails? https://github.com/mwand/eopl3/issues/19
 ;   (lambda (id rhs body k-exp)
 ;     (cps-of-exps (list rhs)
 ;                  (lambda (simples)
