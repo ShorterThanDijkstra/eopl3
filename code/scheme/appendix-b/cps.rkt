@@ -144,7 +144,11 @@
 ;   (lambda (x k)
 ;     (if (< x 2)
 ;         (k x)
-;         (f (- x 1) (lambda (v0) (f (- x 2) (lambda (v1) (k (+ v0 v1)))))))))
+;         (f (- x 1)
+;            (lambda (v0)
+;              (f (- x 2)
+;                 (lambda (v1)
+;                   (k (+ v0 v1)))))))))
 
 (lambda (f k)
   (k (lambda (x k)
@@ -155,3 +159,26 @@
                 (f (- x 2)
                    (lambda (v1)
                      (k (+ v0 v1))))))))))
+
+; https://www.youtube.com/watch?v=_kCa9heo834&list=PL_fXogTdDGQfj5-jLAxtR8-NPM2KNvyBU
+(define (safe-/ x y)
+  (lambda (ok err)
+    (cond [(= 0 y) (err 'division-by-zero)]
+          [else (ok (/ x y))])))
+
+(define (default-ok x)
+  (cons 'ok x))
+
+(define (default-fail x)
+  (cons 'error x))
+
+; (/ (/ 10 2) 3)
+(define o1 (safe-/ 10 0))
+
+(define o2 (lambda (x) (safe-/ x 3)))
+
+(define (cps-bind o1 o2)
+  (lambda (ret err)
+    (o1 (lambda (res) ((o2 res) ret err)) err)))
+
+((cps-bind o1 o2) default-ok default-fail)
