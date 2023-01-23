@@ -38,13 +38,13 @@ Type error
       proc (g)
         proc (p)
           proc (x) if (p (f x)) then (g 1) else -((f x),1)
-(tx -> Int) -> ((Int -> Bool) -> ((Int -> Bool) -> (tx -> Int)))
+(tx -> Int) -> ((Int -> Int) -> ((Int -> Bool) -> (tx -> Int)))
 
 12. proc (x)
       proc(p)
         proc (f)
           if (p x) then -(x,1) else (f p)
-Int -> ((Int -> Bool) -> ((Int -> Bool) -> Int) -> Int)
+Int -> ((Int -> Bool) -> (((Int -> Bool) -> Int) -> Int)))
 
 13. proc (f)
       let d = proc (x)
