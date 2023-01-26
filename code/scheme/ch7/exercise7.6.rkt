@@ -20,6 +20,7 @@
     (expression ("if" expression "then" expression "else" expression) if-exp)
     (expression (identifier) var-exp)
     (expression ("let" identifier "=" expression "in" expression) let-exp)
+    (expression ("set" identifier "=" expression) assign-exp)
     (expression ("proc" "(" identifier ":" type ")" expression) proc-exp)
     (expression ("(" expression expression ")") call-exp)
     (expression ("letrec" type
@@ -71,25 +72,21 @@
                  (proc-val (proc proc?)))
 
 (define expval->num
-  (lambda (v)
-    (cases expval
-      v
-      (num-val (num) num)
-      (else (eopl:error 'expval->num "~s" v)))))
+  (lambda (v) (cases expval v (num-val (num) num) (else (eopl:error)))))
 
 (define expval->bool
-  (lambda (v)
-    (cases expval
-      v
-      (bool-val (bool) bool)
-      (else (eopl:error 'expval->bool "~s" v)))))
+  (lambda (v) (cases expval v (bool-val (bool) bool) (else (eopl:error)))))
 
 (define expval->proc
+  (lambda (v) (cases expval v (proc-val (proc) proc) (else (eopl:error)))))
+
+(define expval->scheme-val
   (lambda (v)
     (cases expval
-      v
-      (proc-val (proc) proc)
-      (else (eopl:error 'expval->proc "~s" v)))))
+           v
+           (num-val (num) num)
+           (bool-val (bool) bool)
+           (proc-val (proc) proc))))
 
 ; TypeEnvironment
 (define-datatype
@@ -178,6 +175,10 @@
      (let-exp (var exp1 body)
               (let ([exp1-type (type-of exp1 tenv)])
                 (type-of body (extend-tenv var exp1-type tenv))))
+     (assign-exp (var exp1)
+                 (let ([exp1-type (type-of exp1 tenv)])
+                   (check-equal-type! (apply-tenv tenv var) exp1-type exp1)
+                   (int-type)))
      (proc-exp (var var-type body)
                (let ([result-type
                       (type-of body (extend-tenv var var-type tenv))])
@@ -255,3 +256,15 @@
                             else -((double -(x,1)), -2)
    in double")
 (check-equal? (:t str8) '(int -> int))
+
+(define str9
+  "let x = 10
+   in let void = set x = 12
+   in x")
+(check-equal? (:t str9) 'int)
+
+(define str10
+  "let x = 10
+   in let void = set x = true
+   in x")
+; (:t str10) ; should fail

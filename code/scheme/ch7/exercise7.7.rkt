@@ -49,54 +49,50 @@
 
 ; Environment
 (define-datatype
- environment
- environment?
- (empty-env)
- (extend-env (bvar identifier?) (bval expval?) (saved-env environment?))
- (extend-env-rec (p-name identifier?)
-                 (b-var identifier?)
-                 (p-body expression?)
-                 (saved-env environment?)))
+  environment
+  environment?
+  (empty-env)
+  (extend-env (bvar identifier?) (bval expval?) (saved-env environment?))
+  (extend-env-rec (p-name identifier?)
+                  (b-var identifier?)
+                  (p-body expression?)
+                  (saved-env environment?)))
 
 (define-datatype
- proc
- proc?
- (procedure (var identifier?) (body expression?) (saved-env environment?)))
+  proc
+  proc?
+  (procedure (var identifier?) (body expression?) (saved-env environment?)))
 
 ; ExpVal
 (define-datatype expval
-                 expval?
-                 (num-val (value number?))
-                 (bool-val (boolean boolean?))
-                 (proc-val (proc proc?)))
+  expval?
+  (num-val (value number?))
+  (bool-val (boolean boolean?))
+  (proc-val (proc proc?)))
 
 (define expval->num
+  (lambda (v) (cases expval v (num-val (num) num) (else (eopl:error)))))
+
+(define expval->bool
+  (lambda (v) (cases expval v (bool-val (bool) bool) (else (eopl:error)))))
+
+(define expval->proc
+  (lambda (v) (cases expval v (proc-val (proc) proc) (else (eopl:error)))))
+
+(define expval->scheme-val
   (lambda (v)
     (cases expval
       v
       (num-val (num) num)
-      (else (eopl:error 'expval->num "~s" v)))))
-
-(define expval->bool
-  (lambda (v)
-    (cases expval
-      v
       (bool-val (bool) bool)
-      (else (eopl:error 'expval->bool "~s" v)))))
-
-(define expval->proc
-  (lambda (v)
-    (cases expval
-      v
-      (proc-val (proc) proc)
-      (else (eopl:error 'expval->proc "~s" v)))))
+      (proc-val (proc) proc))))
 
 ; TypeEnvironment
 (define-datatype
- type-environment
- type-environment?
- (empty-tenv-record)
- (extended-tenv-record (sym identifier?) (type type?) (tenv type-environment?)))
+  type-environment
+  type-environment?
+  (empty-tenv-record)
+  (extended-tenv-record (sym identifier?) (type type?) (tenv type-environment?)))
 
 (define empty-tenv empty-tenv-record)
 (define extend-tenv extended-tenv-record)
@@ -104,12 +100,12 @@
 (define apply-tenv
   (lambda (tenv sym)
     (cases
-     type-environment
-     tenv
-     (empty-tenv-record () (eopl:error 'apply-tenv "Unbound variable ~s" sym))
-     (extended-tenv-record
-      (sym1 val1 old-env)
-      (if (eqv? sym sym1) val1 (apply-tenv old-env sym))))))
+        type-environment
+      tenv
+      (empty-tenv-record () (eopl:error 'apply-tenv "Unbound variable ~s" sym))
+      (extended-tenv-record
+       (sym1 val1 old-env)
+       (if (eqv? sym sym1) val1 (apply-tenv old-env sym))))))
 
 (define init-tenv
   (lambda ()
@@ -138,13 +134,13 @@
 (define type-to-external-form
   (lambda (ty)
     (cases type
-           ty
-           (int-type () 'int)
-           (bool-type () 'bool)
-           (proc-type (arg-type result-type)
-                      (list (type-to-external-form arg-type)
-                            '->
-                            (type-to-external-form result-type))))))
+      ty
+      (int-type () 'int)
+      (bool-type () 'bool)
+      (proc-type (arg-type result-type)
+                 (list (type-to-external-form arg-type)
+                       '->
+                       (type-to-external-form result-type))))))
 
 ;; type-of-program : Program -> Type
 (define type-of-program
@@ -155,52 +151,52 @@
 (define type-of
   (lambda (exp tenv)
     (cases
-     expression
-     exp
-     (const-exp (num) (int-type))
-     (var-exp (var) (apply-tenv tenv var))
-     (diff-exp (exp1 exp2)
-               (let ([ty1 (type-of exp1 tenv)] [ty2 (type-of exp2 tenv)])
-                 (check-equal-type! ty1 (int-type) exp1)
-                 (check-equal-type! ty2 (int-type) exp2)
-                 (int-type)))
-     (zero?-exp (exp1)
-                (let ([ty1 (type-of exp1 tenv)])
+        expression
+      exp
+      (const-exp (num) (int-type))
+      (var-exp (var) (apply-tenv tenv var))
+      (diff-exp (exp1 exp2)
+                (let ([ty1 (type-of exp1 tenv)] [ty2 (type-of exp2 tenv)])
                   (check-equal-type! ty1 (int-type) exp1)
-                  (bool-type)))
-     (if-exp (exp1 exp2 exp3)
-             (let ([ty1 (type-of exp1 tenv)]
-                   [ty2 (type-of exp2 tenv)]
-                   [ty3 (type-of exp3 tenv)])
-               (check-equal-type! ty1 (bool-type) exp1)
-               (check-equal-type! ty2 ty3 exp)
-               ty2))
-     (let-exp (var exp1 body)
-              (let ([exp1-type (type-of exp1 tenv)])
-                (type-of body (extend-tenv var exp1-type tenv))))
-     (proc-exp (var var-type body)
-               (let ([result-type
-                      (type-of body (extend-tenv var var-type tenv))])
-                 (proc-type var-type result-type)))
-     (call-exp
-      (rator rand)
-      (let ([rator-type (type-of rator tenv)] [rand-type (type-of rand tenv)])
-        (cases type
-               rator-type
-               (proc-type (arg-type result-type)
-                          (begin
-                            (check-equal-type! arg-type rand-type rand)
-                            result-type))
-               (else (report-rator-not-a-proc-type rator-type rator)))))
-     (letrec-exp
-      (p-result-type p-name b-var b-var-type p-body letrec-body)
-      (let ([tenv-for-letrec-body
-             (extend-tenv p-name (proc-type b-var-type p-result-type) tenv)])
-        (let ([p-body-type
-               (type-of p-body
-                        (extend-tenv b-var b-var-type tenv-for-letrec-body))])
-          (check-equal-type! p-body-type p-result-type p-body)
-          (type-of letrec-body tenv-for-letrec-body)))))))
+                  (check-equal-type! ty2 (int-type) exp2)
+                  (int-type)))
+      (zero?-exp (exp1)
+                 (let ([ty1 (type-of exp1 tenv)])
+                   (check-equal-type! ty1 (int-type) exp1)
+                   (bool-type)))
+      (if-exp (exp1 exp2 exp3)
+              (let ([ty1 (type-of exp1 tenv)])
+                (check-equal-type! ty1 (bool-type) exp1)
+                (let ([ty2 (type-of exp2 tenv)]
+                      [ty3 (type-of exp3 tenv)])
+                  (check-equal-type! ty2 ty3 exp)
+                  ty2)))
+      (let-exp (var exp1 body)
+               (let ([exp1-type (type-of exp1 tenv)])
+                 (type-of body (extend-tenv var exp1-type tenv))))
+      (proc-exp (var var-type body)
+                (let ([result-type
+                       (type-of body (extend-tenv var var-type tenv))])
+                  (proc-type var-type result-type)))
+      (call-exp
+       (rator rand)
+       (let ([rator-type (type-of rator tenv)] [rand-type (type-of rand tenv)])
+         (cases type
+           rator-type
+           (proc-type (arg-type result-type)
+                      (begin
+                        (check-equal-type! arg-type rand-type rand)
+                        result-type))
+           (else (report-rator-not-a-proc-type rator-type rator)))))
+      (letrec-exp
+       (p-result-type p-name b-var b-var-type p-body letrec-body)
+       (let ([tenv-for-letrec-body
+              (extend-tenv p-name (proc-type b-var-type p-result-type) tenv)])
+         (let ([p-body-type
+                (type-of p-body
+                         (extend-tenv b-var b-var-type tenv-for-letrec-body))])
+           (check-equal-type! p-body-type p-result-type p-body)
+           (type-of letrec-body tenv-for-letrec-body)))))))
 
 (define report-rator-not-a-proc-type
   (lambda (rator-type rator)
@@ -255,3 +251,6 @@
                             else -((double -(x,1)), -2)
    in double")
 (check-equal? (:t str8) '(int -> int))
+
+; Give an expression for which the new version of the checker behaves differently from the old version
+(define str9 "if 2 then -(true, 3) else 5")
