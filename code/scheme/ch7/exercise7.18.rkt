@@ -21,18 +21,18 @@
       (tvar-type (sn)
                  (if (equal? ty0 tvar) ty1 ty0)))))
 
-; remove-tvars : Type × Subst → Type × Subst
-(define remove-tvars
+; remove-bound-tvars : Type × Subst → Type × Subst
+(define remove-bound-tvars
   (lambda (ty subst cache)
     (cases type ty
       (int-type () (list (int-type) cache))
       (bool-type () (list (bool-type) cache))
       (proc-type (t1 t2)
-                 (let ((res1 (remove-tvars t1 subst cache)))
+                 (let ((res1 (remove-bound-tvars t1 subst cache)))
                    (let ((res-t1 (car res1))
                          (res-cache1 (cadr res1)))
                      (let ((res2
-                            (remove-tvars t2 subst
+                            (remove-bound-tvars t2 subst
                                           (cons (cons t1 res-t1) res-cache1))))
                        (let ((res-t2 (car res2))
                              (res-cache2 (cadr res2)))
@@ -44,8 +44,8 @@
                        (list (cdr from-cache) cache)
                        (let ((p (assoc ty subst)))
                          (if p
-                             (remove-tvars (cdr p) subst cache)
-                             (eopl:error 'remove-tvars)))))))))
+                             (remove-bound-tvars (cdr p) subst cache)
+                             ty))))))))
 
 ; apply-subst-to-type : Type × Subst → Type
 (define apply-subst-to-type
@@ -60,7 +60,7 @@
       (tvar-type (sn)
                  (let ((tmp (assoc ty subst)))
                    (if tmp
-                       (car (remove-tvars (cdr tmp) subst '()))
+                       (car (remove-bound-tvars (cdr tmp) subst '()))
                        ty))))))
 
 ; empty-subst : () → Subst

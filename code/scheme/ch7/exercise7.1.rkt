@@ -12,7 +12,7 @@ t
 (t1 -> t2) -> (t1 -> t2)
 
 5. proc (x) (x 3)
-(Int -> t) -> Int
+(Int -> t) -> t
 
 6. proc (x) (x x)
 (t1 -> t2)
@@ -21,10 +21,10 @@ t
 no type
 
 7. proc (x) if x then 88 else 99
-t -> Int
+Bool -> Int
 
 8. proc (x) proc (y) if x then y else 99
-t -> (Int -> Bool)
+Bool -> (Int -> Int)
 
 9.(proc (p) if p then 88 else 99
   33)

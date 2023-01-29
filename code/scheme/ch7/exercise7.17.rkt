@@ -49,23 +49,23 @@
       (tvar-type (sn)
                  (let ((tmp (assoc ty subst)))
                    (if tmp
-                       (remove-tvars (cdr tmp) subst)      
+                       (remove-bound-tvars (cdr tmp) subst)      
                        ty))))))
 
-; remove-tvars : Type × Subst → Type
-(define remove-tvars
+; remove-bound-tvars : Type × Subst → Type
+(define remove-bound-tvars
   (lambda (ty subst)
     (cases type ty
           (int-type () (int-type))
           (bool-type () (bool-type))
           (proc-type (t1 t2)
-                     (proc-type (remove-tvars t1 subst)
-                                (remove-tvars t2 subst)))
+                     (proc-type (remove-bound-tvars t1 subst)
+                                (remove-bound-tvars t2 subst)))
            (tvar-type (sn)
                       (let ((p (assoc ty subst)))
                         (if p
-                            (remove-tvars (cdr p) subst)
-                            (eopl:error 'remove-tvars)))))))
+                            (remove-bound-tvars (cdr p) subst)
+                            ty))))))
 
 ; empty-subst : () → Subst
 (define empty-subst (lambda () '()))
