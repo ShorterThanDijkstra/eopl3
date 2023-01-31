@@ -17,19 +17,18 @@
     (expression ("zero?" "(" expression ")") zero?-exp)
     (expression ("if" expression "then" expression "else" expression) if-exp)
     (expression (identifier) var-exp)
-    (expression ("let" identifier "=" expression "in" expression) let-exp)
-    (expression ("proc" "(" identifier ":" optional-type ")" expression)
+    (expression ("let" (arbno identifier "=" expression) "in" expression)
+                let-exp)
+    (expression ("proc" "(" (separated-list identifier ":" optional-type ",") ")" expression)
                 proc-exp)
-    (expression ("(" expression expression ")") call-exp)
-    (expression ("letrec" optional-type
-                          identifier
-                          "("
-                          identifier
-                          ":"
-                          optional-type
-                          ")"
-                          "="
-                          expression
+    (expression ("(" expression (arbno expression) ")") call-exp)
+    (expression ("letrec" (arbno optional-type
+                                 identifier
+                                 "("
+                                 (separated-list identifier ":" optional-type ",")
+                                 ")"
+                                 "="
+                                 expression)
                           "in"
                           expression)
                 letrec-exp)
@@ -37,7 +36,7 @@
     (optional-type (type) a-type)
     (type ("int") int-type)
     (type ("bool") bool-type)
-    (type ("(" type "->" type ")") proc-type)
+    (type ("(" (separated-list type "*") "->" type ")") proc-type)
     (type ("%tvar-type" number) tvar-type)))
 
 (sllgen:make-define-datatypes the-lexical-spec the-grammar)
@@ -53,12 +52,13 @@
 (define tvar-type?
   (lambda (ty) (cases type ty [tvar-type (serial-number) #t] [else #f])))
 
-(define proc-type->arg-type
+(define proc-type->args-types
   (lambda (ty)
-    (cases type
-           ty
-           [proc-type (arg-type result-type) arg-type]
-           [else (eopl:error 'proc-type->arg-type "Not a proc type: ~s" ty)])))
+    (cases
+     type
+     ty
+     [proc-type (args-types result-type) args-types]
+     [else (eopl:error 'proc-type->args-types "Not a proc type: ~s" ty)])))
 
 (define proc-type->result-type
   (lambda (ty)
@@ -85,18 +85,24 @@
 
 (define type-to-external-form
   (lambda (ty)
-    (cases type
-           ty
-           (int-type () 'int)
-           (bool-type () 'bool)
-           (proc-type (arg-type result-type)
-                      (list (type-to-external-form arg-type)
-                            '->
-                            (type-to-external-form result-type)))
-           (tvar-type
-            (serial-number)
-            (string->symbol
-             (string-append "tvar" (number->string serial-number)))))))
+    (cases
+     type
+     ty
+     (int-type () 'int)
+     (bool-type () 'bool)
+     (proc-type (args-types result-type)
+                (if (null? args-types)
+                    (type-to-external-form result-type)
+                    (let loop ([first (car args-types)] [rest (cdr args-types)])
+                      (if (null? rest)
+                          (list (type-to-external-form first)
+                                '->
+                                (type-to-external-form result-type))
+                          (cons (type-to-external-form first)
+                                (cons '* (loop (car rest) (cdr rest))))))))
+     (tvar-type (serial-number)
+                (string->symbol
+                 (string-append "tvar" (number->string serial-number)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Substitutions
@@ -109,8 +115,10 @@
            ty0
            (int-type () (int-type))
            (bool-type () (bool-type))
-           (proc-type (arg-type result-type)
-                      (proc-type (apply-one-subst arg-type tvar ty1)
+           (proc-type (args-types result-type)
+                      (proc-type (map (lambda (arg-type)
+                                        (apply-one-subst arg-type tvar ty1))
+                                      args-types)
                                  (apply-one-subst result-type tvar ty1)))
            (tvar-type (sn) (if (equal? ty0 tvar) ty1 ty0)))))
 
@@ -122,9 +130,11 @@
      ty
      (int-type () (int-type))
      (bool-type () (bool-type))
-     (proc-type (t1 t2)
-                (proc-type (apply-subst-to-type t1 subst)
-                           (apply-subst-to-type t2 subst)))
+     (proc-type (args-types result-type)
+                (proc-type (map (lambda (arg-type)
+                                  (apply-subst-to-type arg-type subst))
+                                args-types)
+                           (apply-subst-to-type result-type subst)))
      (tvar-type (sn) (let ([tmp (assoc ty subst)]) (if tmp (cdr tmp) ty))))))
 
 ; empty-subst : () → Subst
@@ -164,28 +174,42 @@
              (extend-subst subst ty2 ty1)
              (report-no-occurrence-violation ty2 ty1 exp))]
         [(and (proc-type? ty1) (proc-type? ty2))
-         (let ([subst (unifier (proc-type->arg-type ty1)
-                               (proc-type->arg-type ty2)
-                               subst
-                               exp)])
-           (let ([subst (unifier (proc-type->result-type ty1)
-                                 (proc-type->result-type ty2)
-                                 subst
-                                 exp)])
-             subst))]
+         (let unifier-args ([args-types-ty1 (proc-type->args-types ty1)]
+                            [args-types-ty2 (proc-type->args-types ty2)]
+                            [subst subst])
+           (if (null? args-types-ty1)
+               (unifier (proc-type->result-type ty1)
+                        (proc-type->result-type ty2)
+                        subst
+                        exp)
+               (let ([new-subst (unifier (car args-types-ty1)
+                                         (car args-types-ty2)
+                                         subst
+                                         exp)])
+                 (unifier-args (cdr args-types-ty1)
+                               (cdr args-types-ty2)
+                               new-subst))))]
         [else (report-unification-failure ty1 ty2 exp)]))))
 
+(define every?
+  (lambda (pred lst)
+    (cond
+      [(null? lst) #t]
+      [(pred (car lst)) (every? pred (cdr lst))]
+      [else #f])))
 ; no-occurrence? : Tvar × Type → Bool
 (define no-occurrence?
   (lambda (tvar ty)
-    (cases type
-           ty
-           (int-type () #t)
-           (bool-type () #t)
-           (proc-type (arg-type result-type)
-                      (and (no-occurrence? tvar arg-type)
-                           (no-occurrence? tvar result-type)))
-           (tvar-type (serial-number) (not (equal? tvar ty))))))
+    (cases
+     type
+     ty
+     (int-type () #t)
+     (bool-type () #t)
+     (proc-type (args-types result-type)
+                (and (every? (lambda (arg-type) (no-occurrence? tvar arg-type))
+                             args-types)
+                     (no-occurrence? tvar result-type)))
+     (tvar-type (serial-number) (not (equal? tvar ty))))))
 
 (define report-unification-failure
   (lambda (ty1 ty2 exp)
@@ -214,6 +238,17 @@
 
 (define empty-tenv empty-tenv-record)
 (define extend-tenv extended-tenv-record)
+
+(define extend-tenv*
+  (lambda (vars types tenv)
+    (if (not (= (length vars) (length types)))
+        (eopl:error 'extend-tenv*)
+        (let loop ([vars vars] [types types])
+          (if (null? vars)
+              tenv
+              (extend-tenv (car vars)
+                           (car types)
+                           (loop (cdr vars) (cdr types))))))))
 
 (define apply-tenv
   (lambda (tenv sym)
@@ -292,53 +327,86 @@
                                 (let ([subst (unifier ty2 ty3 subst exp)])
                                   (an-answer ty2 subst))))))))))
      (var-exp (var) (an-answer (apply-tenv tenv var) subst))
-     (let-exp (var exp1 body)
-              (cases answer
-                     (type-of exp1 tenv subst)
-                     (an-answer
-                      (rhs-type subst)
-                      (type-of body (extend-tenv var rhs-type tenv) subst))))
-     (proc-exp (var otype body)
-               (let ([arg-type (otype->type otype)])
+     (let-exp (vars exps body)
+              (let loop ([vars vars] [exps exps] [tenv tenv] [subst subst])
+                (if (null? vars)
+                    (type-of body tenv subst)
+                    (cases answer
+                           (type-of (car exps) tenv subst)
+                           (an-answer (ty1 subst)
+                                      (loop (cdr vars)
+                                            (cdr exps)
+                                            (extend-tenv (car vars) ty1 tenv)
+                                            subst))))))
+     (proc-exp (vars otypes body)
+               (let ([args-types (map otype->type otypes)])
                  (cases answer
-                        (type-of body (extend-tenv var arg-type tenv) subst)
+                        (type-of body (extend-tenv* vars args-types tenv) subst)
                         (an-answer (result-type subst)
-                                   (an-answer (proc-type arg-type result-type)
+                                   (an-answer (proc-type args-types result-type)
                                               subst)))))
-     (call-exp (rator rand)
-               (let ([result-type (fresh-tvar-type)])
-                 (cases answer
-                        (type-of rator tenv subst)
-                        (an-answer
-                         (rator-type subst)
-                         (cases answer
-                                (type-of rand tenv subst)
-                                (an-answer
-                                 (rand-type subst)
-                                 (let ([subst (unifier rator-type
-                                                       (proc-type rand-type
-                                                                  result-type)
-                                                       subst
-                                                       exp)])
-                                   (an-answer result-type subst))))))))
+     (call-exp
+      (rator rands)
+      (let loop-rands ([rands rands] [rands-types '()] [subst subst])
+        (if (null? rands)
+            (let ([result-type (fresh-tvar-type)]
+                  [rands-types (reverse rands-types)])
+              (cases answer
+                     (type-of rator tenv subst)
+                     (an-answer (rator-type subst)
+                                (let ([subst (unifier rator-type
+                                                      (proc-type rands-types
+                                                                 result-type)
+                                                      subst
+                                                      exp)])
+                                  (an-answer result-type subst)))))
+            (cases answer
+                   (type-of (car rands) tenv subst)
+                   (an-answer (rand-type subst)
+                              (loop-rands (cdr rands)
+                                          (cons rand-type rands-types)
+                                          subst))))))
      (letrec-exp
-      (proc-result-otype proc-name bvar proc-arg-otype proc-body letrec-body)
-      (let ([proc-result-type (otype->type proc-result-otype)]
-            [proc-arg-type (otype->type proc-arg-otype)])
+      (proc-result-otypes proc-names
+                          bvarss
+                          proc-args-otypess
+                          proc-bodies
+                          letrec-body)
+      (let ([proc-result-types (map otype->type proc-result-otypes)]
+            [proc-args-typess (map (lambda (proc-args-otypes)
+                                     (map otype->type proc-args-otypes))
+                                   proc-args-otypess)])
         (let ([tenv-for-letrec-body
-               (extend-tenv proc-name
-                            (proc-type proc-arg-type proc-result-type)
-                            tenv)])
-          (cases
-           answer
-           (type-of proc-body
-                    (extend-tenv bvar proc-arg-type tenv-for-letrec-body)
-                    subst)
-           (an-answer
-            (proc-body-type subst)
-            (let ([subst
-                   (unifier proc-body-type proc-result-type subst proc-body)])
-              (type-of letrec-body tenv-for-letrec-body subst))))))))))
+               (extend-tenv*
+                proc-names
+                (map (lambda (proc-args-types proc-result-type)
+                       (proc-type proc-args-types proc-result-type))
+                     proc-args-typess
+                     proc-result-types)
+                tenv)])
+          (let loop-procs ([proc-bodies proc-bodies]
+                           [bvarss bvarss]
+                           [proc-result-types proc-result-types]
+                           [proc-args-typess proc-args-typess]
+                           [subst subst])
+            (if (null? proc-bodies)
+                (type-of letrec-body tenv-for-letrec-body subst)
+                (cases answer
+                       (type-of (car proc-bodies)
+                                (extend-tenv* (car bvarss)
+                                              (car proc-args-typess)
+                                              tenv-for-letrec-body)
+                                subst)
+                       (an-answer (proc-body-type subst)
+                                  (let ([subst (unifier proc-body-type
+                                                        (car proc-result-types)
+                                                        subst
+                                                        (car proc-bodies))])
+                                    (loop-procs (cdr proc-bodies)
+                                                (cdr bvarss)
+                                                (cdr proc-result-types)
+                                                (cdr proc-args-typess)
+                                                subst))))))))))))
 
 ; TvarTypeSym = a symbol ending with a digit
 ; A-list = Listof(Pair(TvarTypeSym, TvarTypeSym))
@@ -458,3 +526,36 @@
                            else -((double -(x,1)), -2)
    in double")
 (type-eq? str11 '(int -> int))
+
+
+(define str12
+  "proc(x: ?, y: ?, z: ?)
+     if (z 10 11 true)
+     then 12
+     else if y
+          then x
+          else -(x, 1)")
+(type-eq? str12 '(int * bool * (int * int * bool -> bool) -> int))
+
+(define str13 "proc() 0")
+(type-eq? str13 'int)
+
+(define str14
+  "let x = 11
+       y = 13
+       f = proc(a: ?, b: ?)
+             zero?(-(a, b))
+       g = proc(a: ?, b: ?, c: ?)
+             if (c a b) then false else true
+   in (g x y f)")
+(type-eq? str14 'bool)
+
+(define str15
+  " 
+   letrec
+     int add(a: ?, b: ?) = -(a, -(0, b))
+     int mul(a: ?, b: ?) = if zero?(b) then 0 else (add a (mul a -(b, 1)))
+     int fib(a: ?, b: ?, n: ?) = if zero?(n) then b else (fib b -(a, -(0, b)) -(n, 1))
+     int factk(n: ?, k: ?) = if zero?(n) then (k 1) else (factk -(n, 1) proc(v0: int) (k (mul v0 n)))
+   in -((factk 10 proc(x: ?) x), (fib 0 1 10))")
+(type-eq? str15 'int)
