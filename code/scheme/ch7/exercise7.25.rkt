@@ -330,7 +330,7 @@
                                             (unifier ty fst-ty subst exp)])
                                        (loop (cdr rest) new-subst)))))))))
      (cons-exp
-      (fst rest)
+      (fst snd)
       (cases
        answer
        (type-of fst tenv subst)
@@ -338,11 +338,11 @@
         (fst-ty subst)
         (cases
          answer
-         (type-of rest tenv subst)
+         (type-of snd tenv subst)
          (an-answer
-          (rest-ty subst)
-          (let ([subst (unifier fst-ty (list-type->type rest-ty) subst exp)])
-            (an-answer rest-ty subst)))))))
+          (snd-ty subst)
+          (let ([subst (unifier (list-type fst-ty) snd-ty subst exp)])
+            (an-answer snd-ty subst)))))))
      (null?-exp
       (exp1)
       (cases answer

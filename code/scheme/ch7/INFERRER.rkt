@@ -458,3 +458,11 @@
                            else -((double -(x,1)), -2)
    in double")
 (type-eq? str11 '(int -> int))
+
+(define str12
+  "letrec ? f (x: ?) = if zero?(x) then (f x) else (f -(x, 1))
+  in (f 10)")
+(:t str12) ;;; what is the type
+#|
+tf = int -> t0
+|#
