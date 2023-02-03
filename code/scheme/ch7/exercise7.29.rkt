@@ -918,3 +918,6 @@
 
 (define str29 "letrec ? f(x: ?) = if zero?(7) then (f 1) else (f true) in f")
 ; (:t str29) ;should fail
+
+(define str30 "proc(y: ?) let f = proc(x: ?) y in (f 1)")
+; (type-eq? str30 '(t0 -> t0)) ; should not fail, but I don't know how to do
