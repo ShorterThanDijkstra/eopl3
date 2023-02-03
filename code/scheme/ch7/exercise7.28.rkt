@@ -72,46 +72,46 @@
 (define list-type->type
   (lambda (ty)
     (cases type
-      ty
-      [list-type (ty) ty]
-      [else (eopl:error 'list-type->type "Not a list type: ~s" ty)])))
+           ty
+           [list-type (ty) ty]
+           [else (eopl:error 'list-type->type "Not a list type: ~s" ty)])))
 
 (define pair-type->fst-type
   (lambda (ty)
     (cases type
-      ty
-      [pair-type (fst snd) fst]
-      [else (eopl:error 'pair-type->fst-type "Not a pair type: ~s" ty)])))
+           ty
+           [pair-type (fst snd) fst]
+           [else (eopl:error 'pair-type->fst-type "Not a pair type: ~s" ty)])))
 
 (define pair-type->snd-type
   (lambda (ty)
     (cases type
-      ty
-      [pair-type (fst snd) snd]
-      [else (eopl:error 'pair-type->snd-type "Not a pair type: ~s" ty)])))
+           ty
+           [pair-type (fst snd) snd]
+           [else (eopl:error 'pair-type->snd-type "Not a pair type: ~s" ty)])))
 
 (define proc-type->arg-type
   (lambda (ty)
     (cases type
-      ty
-      [proc-type (arg-type result-type) arg-type]
-      [else (eopl:error 'proc-type->arg-type "Not a proc type: ~s" ty)])))
+           ty
+           [proc-type (arg-type result-type) arg-type]
+           [else (eopl:error 'proc-type->arg-type "Not a proc type: ~s" ty)])))
 
 (define proc-type->result-type
   (lambda (ty)
     (cases
-        type
-      ty
-      [proc-type (arg-type result-type) result-type]
-      [else (eopl:error 'proc-type->result-types "Not a proc type: ~s" ty)])))
+     type
+     ty
+     [proc-type (arg-type result-type) result-type]
+     [else (eopl:error 'proc-type->result-types "Not a proc type: ~s" ty)])))
 
 ; optype->type : OptionalType → Type
 (define otype->type
   (lambda (otype)
     (cases optional-type
-      otype
-      (no-type () (fresh-tvar-type))
-      (a-type (ty) ty))))
+           otype
+           (no-type () (fresh-tvar-type))
+           (a-type (ty) ty))))
 
 ; fresh-tvar-type : () → Type
 (define fresh-tvar-type
@@ -123,23 +123,23 @@
 (define type-to-external-form
   (lambda (ty)
     (cases type
-      ty
-      (int-type () 'int)
-      (bool-type () 'bool)
-      (list-type (ty) (list 'list-type (type-to-external-form ty)))
-      (proc-type (arg-type result-type)
-                 (list (type-to-external-form arg-type)
-                       '->
-                       (type-to-external-form result-type)))
-      (pair-type (fst snd)
-                 (list 'pair-type
-                       (type-to-external-form fst)
-                       '*
-                       (type-to-external-form snd)))
-      (tvar-type
-       (serial-number)
-       (string->symbol
-        (string-append "tvar" (number->string serial-number)))))))
+           ty
+           (int-type () 'int)
+           (bool-type () 'bool)
+           (list-type (ty) (list 'list-type (type-to-external-form ty)))
+           (proc-type (arg-type result-type)
+                      (list (type-to-external-form arg-type)
+                            '->
+                            (type-to-external-form result-type)))
+           (pair-type (fst snd)
+                      (list 'pair-type
+                            (type-to-external-form fst)
+                            '*
+                            (type-to-external-form snd)))
+           (tvar-type
+            (serial-number)
+            (string->symbol
+             (string-append "tvar" (number->string serial-number)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Substitutions
@@ -149,34 +149,34 @@
 (define apply-one-subst
   (lambda (ty0 tvar ty1)
     (cases type
-      ty0
-      (int-type () (int-type))
-      (bool-type () (bool-type))
-      (list-type (ty) (list-type (apply-one-subst ty tvar ty1)))
-      (pair-type (fst snd)
-                 (pair-type (apply-one-subst fst tvar ty1)
-                            (apply-one-subst snd tvar ty1)))
-      (proc-type (arg-type result-type)
-                 (proc-type (apply-one-subst arg-type tvar ty1)
-                            (apply-one-subst result-type tvar ty1)))
-      (tvar-type (sn) (if (equal? ty0 tvar) ty1 ty0)))))
+           ty0
+           (int-type () (int-type))
+           (bool-type () (bool-type))
+           (list-type (ty) (list-type (apply-one-subst ty tvar ty1)))
+           (pair-type (fst snd)
+                      (pair-type (apply-one-subst fst tvar ty1)
+                                 (apply-one-subst snd tvar ty1)))
+           (proc-type (arg-type result-type)
+                      (proc-type (apply-one-subst arg-type tvar ty1)
+                                 (apply-one-subst result-type tvar ty1)))
+           (tvar-type (sn) (if (equal? ty0 tvar) ty1 ty0)))))
 
 ; apply-subst-to-type : Type × Subst → Type
 (define apply-subst-to-type
   (lambda (ty subst)
     (cases
-        type
-      ty
-      (int-type () (int-type))
-      (bool-type () (bool-type))
-      (list-type (ty) (list-type (apply-subst-to-type ty subst)))
-      (pair-type (fst snd)
-                 (pair-type (apply-subst-to-type fst subst)
-                            (apply-subst-to-type snd subst)))
-      (proc-type (t1 t2)
-                 (proc-type (apply-subst-to-type t1 subst)
-                            (apply-subst-to-type t2 subst)))
-      (tvar-type (sn) (let ([tmp (assoc ty subst)]) (if tmp (cdr tmp) ty))))))
+     type
+     ty
+     (int-type () (int-type))
+     (bool-type () (bool-type))
+     (list-type (ty) (list-type (apply-subst-to-type ty subst)))
+     (pair-type (fst snd)
+                (pair-type (apply-subst-to-type fst subst)
+                           (apply-subst-to-type snd subst)))
+     (proc-type (t1 t2)
+                (proc-type (apply-subst-to-type t1 subst)
+                           (apply-subst-to-type t2 subst)))
+     (tvar-type (sn) (let ([tmp (assoc ty subst)]) (if tmp (cdr tmp) ty))))))
 
 ; empty-subst : () → Subst
 (define empty-subst (lambda () '()))
@@ -242,16 +242,16 @@
 (define no-occurrence?
   (lambda (tvar ty)
     (cases type
-      ty
-      (int-type () #t)
-      (bool-type () #t)
-      (list-type (ty1) (no-occurrence? tvar ty1))
-      (pair-type (fst snd)
-                 (and (no-occurrence? tvar fst) (no-occurrence? tvar snd)))
-      (proc-type (arg-type result-type)
-                 (and (no-occurrence? tvar arg-type)
-                      (no-occurrence? tvar result-type)))
-      (tvar-type (serial-number) (not (equal? tvar ty))))))
+           ty
+           (int-type () #t)
+           (bool-type () #t)
+           (list-type (ty1) (no-occurrence? tvar ty1))
+           (pair-type (fst snd)
+                      (and (no-occurrence? tvar fst) (no-occurrence? tvar snd)))
+           (proc-type (arg-type result-type)
+                      (and (no-occurrence? tvar arg-type)
+                           (no-occurrence? tvar result-type)))
+           (tvar-type (serial-number) (not (equal? tvar ty))))))
 
 (define report-unification-failure
   (lambda (ty1 ty2 exp)
@@ -273,10 +273,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;  Type Environment
 (define-datatype
-  type-environment
-  type-environment?
-  (empty-tenv-record)
-  (extended-tenv-record (sym symbol?) (type type?) (tenv type-environment?)))
+ type-environment
+ type-environment?
+ (empty-tenv-record)
+ (extended-tenv-record (sym symbol?) (type type?) (tenv type-environment?)))
 
 (define empty-tenv empty-tenv-record)
 (define extend-tenv extended-tenv-record)
@@ -284,12 +284,12 @@
 (define apply-tenv
   (lambda (tenv sym)
     (cases
-        type-environment
-      tenv
-      (empty-tenv-record () (eopl:error 'apply-tenv "Unbound variable ~s" sym))
-      (extended-tenv-record
-       (sym1 val1 old-env)
-       (if (eqv? sym sym1) val1 (apply-tenv old-env sym))))))
+     type-environment
+     tenv
+     (empty-tenv-record () (eopl:error 'apply-tenv "Unbound variable ~s" sym))
+     (extended-tenv-record
+      (sym1 val1 old-env)
+      (if (eqv? sym sym1) val1 (apply-tenv old-env sym))))))
 
 (define init-tenv
   (lambda ()
@@ -306,296 +306,279 @@
 (define type-of-program
   (lambda (pgm)
     (cases program
-      pgm
-      (a-program (exp1)
-                 (cases answer
+           pgm
+           (a-program
+            (exp1)
+            (cases answer
                    (type-of (transform exp1) (init-tenv) (empty-subst))
-                   (an-answer (ty subst)
-                              (apply-subst-to-type ty subst)))))))
+                   (an-answer (ty subst) (apply-subst-to-type ty subst)))))))
 
 (define transform
   (lambda (exp)
     (cases
-        expression
-      exp
-      (const-exp (num) (const-exp num))
-      (zero?-exp (exp1) (zero?-exp (transform exp1)))
-      (diff-exp (exp1 exp2)
-                (diff-exp (transform exp1)
-                          (transform exp2)))
-      (if-exp (exp1 exp2 exp3)
-              (if-exp (transform exp1)
-                      (transform exp2)
-                      (transform exp3)))
-      (newpair-exp (exp1 exp2)
-                   (newpair-exp (transform exp1)
-                                (transform exp2)))
-      (unpair-exp
-       (var1 var2 exp1 body)
-       (unpair-exp var1
-                   var2
-                   (transform exp1)
-                   (transform body)))
-      (list-exp (fst rest)
-                (list-exp (transform fst)
-                          (map transform rest)))
-      (cons-exp (fst snd)
-                (cons-exp (transform fst)
-                          (transform snd)))
-      (null?-exp (exp1) (null?-exp (transform exp1)))
-      (emptylist-exp () (emptylist-exp))
-      (car-exp (exp1) (car-exp (transform exp1)))
-      (cdr-exp (exp1) (cdr-exp (transform exp1)))
-      (var-exp (var1)
-               (var-exp var1))
-      (let-exp (var1 exp1 body)
-               (replace var1 (transform exp1) body '()))
-      (proc-exp (var1 otype body)
-                (proc-exp var1 otype (transform body)))
-      (call-exp (rator rand)
-                (call-exp (transform rator)
-                          (transform rand)))
-      (letrec-exp
-       (proc-result-otype proc-name bvar proc-arg-otype proc-body letrec-body)
-       (let ([new-proc-body (transform proc-body)])
-         (replace proc-name
-                  (letrec-exp proc-result-otype proc-name bvar proc-arg-otype new-proc-body (var-exp proc-name))
-                  letrec-body
-                  '()))))))
+     expression
+     exp
+     (const-exp (num) (const-exp num))
+     (zero?-exp (exp1) (zero?-exp (transform exp1)))
+     (diff-exp (exp1 exp2) (diff-exp (transform exp1) (transform exp2)))
+     (if-exp (exp1 exp2 exp3)
+             (if-exp (transform exp1) (transform exp2) (transform exp3)))
+     (newpair-exp (exp1 exp2) (newpair-exp (transform exp1) (transform exp2)))
+     (unpair-exp (var1 var2 exp1 body)
+                 (unpair-exp var1 var2 (transform exp1) (transform body)))
+     (list-exp (fst rest) (list-exp (transform fst) (map transform rest)))
+     (cons-exp (fst snd) (cons-exp (transform fst) (transform snd)))
+     (null?-exp (exp1) (null?-exp (transform exp1)))
+     (emptylist-exp () (emptylist-exp))
+     (car-exp (exp1) (car-exp (transform exp1)))
+     (cdr-exp (exp1) (cdr-exp (transform exp1)))
+     (var-exp (var1) (var-exp var1))
+     (let-exp (var1 exp1 body) (replace var1 (transform exp1) body '()))
+     (proc-exp (var1 otype body) (proc-exp var1 otype (transform body)))
+     (call-exp (rator rand) (call-exp (transform rator) (transform rand)))
+     (letrec-exp
+      (proc-result-otype proc-name bvar proc-arg-otype proc-body letrec-body)
+      (let ([new-proc-body (transform proc-body)])
+        (replace proc-name
+                 (letrec-exp proc-result-otype
+                             proc-name
+                             bvar
+                             proc-arg-otype
+                             new-proc-body
+                             (var-exp proc-name))
+                 letrec-body
+                 '()))))))
 
 (define replace
   (lambda (var new exp bounds)
     (cases
-        expression
-      exp
-      (const-exp (num) (const-exp num))
-      (zero?-exp (exp1) (zero?-exp (replace var new exp1 bounds)))
-      (diff-exp (exp1 exp2)
-                (diff-exp (replace var new exp1 bounds)
-                          (replace var new exp2 bounds)))
-      (if-exp (exp1 exp2 exp3)
-              (if-exp (replace var new exp1 bounds)
-                      (replace var new exp2 bounds)
-                      (replace var new exp3 bounds)))
-      (newpair-exp (exp1 exp2)
-                   (newpair-exp (replace var new exp1 bounds)
-                                (replace var new exp2 bounds)))
-      (unpair-exp
-       (var1 var2 exp1 body)
-       (unpair-exp var1
-                   var2
-                   (replace var new exp1 bounds)
-                   (replace var new body (cons var1 (cons var2 bounds)))))
-      (list-exp (fst rest)
-                (list-exp (replace var new fst bounds)
-                          (map (lambda (exp-rest)
-                                 (replace var new exp-rest bounds))
-                               rest)))
-      (cons-exp (fst snd)
-                (cons-exp (replace var new fst bounds)
-                          (replace var new snd bounds)))
-      (null?-exp (exp1) (null?-exp (replace var new exp1 bounds)))
-      (emptylist-exp () (emptylist-exp))
-      (car-exp (exp1) (car-exp (replace var new exp1 bounds)))
-      (cdr-exp (exp1) (cdr-exp (replace var new exp1 bounds)))
-      (var-exp (var1)
-               (if (memq var bounds)
-                   (var-exp var1)
-                   (if (eqv? var1 var) new (var-exp var1))))
-      (let-exp (var1 exp1 body)
-               (let ([rhs (replace var new exp1 bounds)])
-                 (let-exp var1 rhs (replace var new body (cons var1 bounds)))))
-      (proc-exp (var1 otype body)
-                (proc-exp var1 otype (replace var new body (cons var1 bounds))))
-      (call-exp (rator rand)
-                (call-exp (replace var new rator bounds)
-                          (replace var new rand bounds)))
-      (letrec-exp
-       (proc-result-otype proc-name bvar proc-arg-otype proc-body letrec-body)
-       (let ([new-proc-body
-              (replace var new proc-body
-                       (cons bvar (cons proc-name bounds)))]
-             [new-letrec-body
-              (replace var new letrec-body
-                       (cons proc-name bounds))])
-         (letrec-exp proc-result-otype
-                     proc-name
-                     bvar
-                     proc-arg-otype
-                     new-proc-body
-                     new-letrec-body))))))
+     expression
+     exp
+     (const-exp (num) (const-exp num))
+     (zero?-exp (exp1) (zero?-exp (replace var new exp1 bounds)))
+     (diff-exp (exp1 exp2)
+               (diff-exp (replace var new exp1 bounds)
+                         (replace var new exp2 bounds)))
+     (if-exp (exp1 exp2 exp3)
+             (if-exp (replace var new exp1 bounds)
+                     (replace var new exp2 bounds)
+                     (replace var new exp3 bounds)))
+     (newpair-exp (exp1 exp2)
+                  (newpair-exp (replace var new exp1 bounds)
+                               (replace var new exp2 bounds)))
+     (unpair-exp
+      (var1 var2 exp1 body)
+      (unpair-exp var1
+                  var2
+                  (replace var new exp1 bounds)
+                  (replace var new body (cons var1 (cons var2 bounds)))))
+     (list-exp (fst rest)
+               (list-exp (replace var new fst bounds)
+                         (map (lambda (exp-rest)
+                                (replace var new exp-rest bounds))
+                              rest)))
+     (cons-exp (fst snd)
+               (cons-exp (replace var new fst bounds)
+                         (replace var new snd bounds)))
+     (null?-exp (exp1) (null?-exp (replace var new exp1 bounds)))
+     (emptylist-exp () (emptylist-exp))
+     (car-exp (exp1) (car-exp (replace var new exp1 bounds)))
+     (cdr-exp (exp1) (cdr-exp (replace var new exp1 bounds)))
+     (var-exp (var1)
+              (if (memq var bounds)
+                  (var-exp var1)
+                  (if (eqv? var1 var) new (var-exp var1))))
+     (let-exp (var1 exp1 body)
+              (let ([rhs (replace var new exp1 bounds)])
+                (let-exp var1 rhs (replace var new body (cons var1 bounds)))))
+     (proc-exp (var1 otype body)
+               (proc-exp var1 otype (replace var new body (cons var1 bounds))))
+     (call-exp (rator rand)
+               (call-exp (replace var new rator bounds)
+                         (replace var new rand bounds)))
+     (letrec-exp
+      (proc-result-otype proc-name bvar proc-arg-otype proc-body letrec-body)
+      (let ([new-proc-body
+             (replace var new proc-body (cons bvar (cons proc-name bounds)))]
+            [new-letrec-body
+             (replace var new letrec-body (cons proc-name bounds))])
+        (letrec-exp proc-result-otype
+                    proc-name
+                    bvar
+                    proc-arg-otype
+                    new-proc-body
+                    new-letrec-body))))))
 
 ;; type-of: Exp * Tenv * Subst  -> Answer
 (define type-of
   (lambda (exp tenv subst)
     (cases
-        expression
-      exp
-      (const-exp (num) (an-answer (int-type) subst))
-      (zero?-exp
-       (exp1)
-       (cases answer
-         (type-of exp1 tenv subst)
-         (an-answer (type1 subst1)
-                    (let ([subst2 (unifier type1 (int-type) subst1 exp)])
-                      (an-answer (bool-type) subst2)))))
-      (diff-exp
-       (exp1 exp2)
-       (cases answer
-         (type-of exp1 tenv subst)
-         (an-answer
-          (type1 subst1)
-          (let ([subst1 (unifier type1 (int-type) subst1 exp1)])
-            (cases answer
-              (type-of exp2 tenv subst1)
-              (an-answer
-               (type2 subst2)
-               (let ([subst2 (unifier type2 (int-type) subst2 exp2)])
-                 (an-answer (int-type) subst2))))))))
-      (if-exp
-       (exp1 exp2 exp3)
-       (cases answer
-         (type-of exp1 tenv subst)
-         (an-answer
-          (ty1 subst)
-          (let ([subst (unifier ty1 (bool-type) subst exp1)])
-            (cases answer
-              (type-of exp2 tenv subst)
-              (an-answer
-               (ty2 subst)
-               (cases answer
-                 (type-of exp3 tenv subst)
-                 (an-answer
-                  (ty3 subst)
-                  (let ([subst (unifier ty2 ty3 subst exp)])
-                    (an-answer ty2 subst))))))))))
-      (var-exp (var) (an-answer (apply-tenv tenv var) subst))
-      (newpair-exp
-       (exp1 exp2)
-       (cases answer
-         (type-of exp1 tenv subst)
-         (an-answer (exp1-ty subst)
-                    (cases answer
-                      (type-of exp2 tenv subst)
-                      (an-answer (exp2-ty subst)
-                                 (an-answer (pair-type exp1-ty exp2-ty)
-                                            subst))))))
-      (unpair-exp
-       (var1 var2 exp1 body)
-       (cases answer
-         (type-of exp1 tenv subst)
-         (an-answer
-          (exp1-ty subst)
-          (let ([new-tenv
-                 (extend-tenv
-                  var2
-                  (pair-type->snd-type exp1-ty)
-                  (extend-tenv var1 (pair-type->fst-type exp1-ty) tenv))])
-            (type-of body new-tenv subst)))))
-      (list-exp (fst rest)
-                (cases answer
-                  (type-of fst tenv subst)
-                  (an-answer
-                   (fst-ty subst)
-                   (let loop ([rest rest] [subst subst])
-                     (if (null? rest)
-                         (an-answer (list-type fst-ty) subst)
-                         (cases answer
-                           (type-of (car rest) tenv subst)
-                           (an-answer
-                            (ty subst)
-                            (let ([new-subst
-                                   (unifier ty fst-ty subst exp)])
-                              (loop (cdr rest) new-subst)))))))))
-      (cons-exp
-       (fst snd)
-       (cases
-           answer
-         (type-of fst tenv subst)
-         (an-answer
-          (fst-ty subst)
-          (cases
-              answer
-            (type-of snd tenv subst)
-            (an-answer
-             (snd-ty subst)
-             (let ([subst (unifier (list-type fst-ty) snd-ty subst exp)])
-               (an-answer snd-ty subst)))))))
-      (null?-exp
-       (exp1)
-       (cases answer
-         (type-of exp1 tenv subst)
-         (an-answer
-          (exp1-ty subst)
-          (let ([tvar1 (fresh-tvar-type)])
-            (let ([subst (unifier (list-type tvar1) exp1-ty subst exp1)])
-              (an-answer (bool-type) subst))))))
-      (emptylist-exp () (an-answer (list-type (fresh-tvar-type)) subst))
-      (car-exp
-       (exp1)
-       (cases answer
-         (type-of exp1 tenv subst)
-         (an-answer
-          (exp1-ty subst)
-          (let ([tvar1 (fresh-tvar-type)])
-            (let ([subst (unifier (list-type tvar1) exp1-ty subst exp1)])
-              (an-answer tvar1 subst))))))
-      (cdr-exp
-       (exp1)
-       (cases answer
-         (type-of exp1 tenv subst)
-         (an-answer
-          (exp1-ty subst)
-          (let ([tvar1 (fresh-tvar-type)])
-            (let ([subst (unifier (list-type tvar1) exp1-ty subst exp1)])
-              (an-answer exp1-ty subst))))))
-      (let-exp (var exp1 body)
-               (cases answer
-                 (type-of exp1 tenv subst)
-                 (an-answer
-                  (rhs-type subst)
-                  (type-of body (extend-tenv var rhs-type tenv) subst))))
-      (proc-exp (var otype body)
-                (let ([arg-type (otype->type otype)])
-                  (cases answer
-                    (type-of body (extend-tenv var arg-type tenv) subst)
-                    (an-answer (result-type subst)
-                               (an-answer (proc-type arg-type result-type)
-                                          subst)))))
-      (call-exp (rator rand)
-                (let ([result-type (fresh-tvar-type)])
-                  (cases answer
-                    (type-of rator tenv subst)
-                    (an-answer
-                     (rator-type subst)
-                     (cases answer
-                       (type-of rand tenv subst)
-                       (an-answer
-                        (rand-type subst)
-                        (let ([subst (unifier rator-type
-                                              (proc-type rand-type
-                                                         result-type)
-                                              subst
-                                              exp)])
-                          (an-answer result-type subst))))))))
-      (letrec-exp
-       (proc-result-otype proc-name bvar proc-arg-otype proc-body letrec-body)
-       (let ([proc-result-type (otype->type proc-result-otype)]
-             [proc-arg-type (otype->type proc-arg-otype)])
-         (let ([tenv-for-letrec-body
-                (extend-tenv proc-name
-                             (proc-type proc-arg-type proc-result-type)
-                             tenv)])
-           (cases
-               answer
-             (type-of proc-body
-                      (extend-tenv bvar proc-arg-type tenv-for-letrec-body)
-                      subst)
+     expression
+     exp
+     (const-exp (num) (an-answer (int-type) subst))
+     (zero?-exp
+      (exp1)
+      (cases answer
+             (type-of exp1 tenv subst)
+             (an-answer (type1 subst1)
+                        (let ([subst2 (unifier type1 (int-type) subst1 exp)])
+                          (an-answer (bool-type) subst2)))))
+     (diff-exp
+      (exp1 exp2)
+      (cases answer
+             (type-of exp1 tenv subst)
              (an-answer
-              (proc-body-type subst)
-              (let ([subst
-                     (unifier proc-body-type proc-result-type subst proc-body)])
-                (type-of letrec-body tenv-for-letrec-body subst))))))))))
+              (type1 subst1)
+              (let ([subst1 (unifier type1 (int-type) subst1 exp1)])
+                (cases answer
+                       (type-of exp2 tenv subst1)
+                       (an-answer
+                        (type2 subst2)
+                        (let ([subst2 (unifier type2 (int-type) subst2 exp2)])
+                          (an-answer (int-type) subst2))))))))
+     (if-exp
+      (exp1 exp2 exp3)
+      (cases answer
+             (type-of exp1 tenv subst)
+             (an-answer
+              (ty1 subst)
+              (let ([subst (unifier ty1 (bool-type) subst exp1)])
+                (cases answer
+                       (type-of exp2 tenv subst)
+                       (an-answer
+                        (ty2 subst)
+                        (cases answer
+                               (type-of exp3 tenv subst)
+                               (an-answer
+                                (ty3 subst)
+                                (let ([subst (unifier ty2 ty3 subst exp)])
+                                  (an-answer ty2 subst))))))))))
+     (var-exp (var) (an-answer (apply-tenv tenv var) subst))
+     (newpair-exp
+      (exp1 exp2)
+      (cases answer
+             (type-of exp1 tenv subst)
+             (an-answer (exp1-ty subst)
+                        (cases answer
+                               (type-of exp2 tenv subst)
+                               (an-answer (exp2-ty subst)
+                                          (an-answer (pair-type exp1-ty exp2-ty)
+                                                     subst))))))
+     (unpair-exp
+      (var1 var2 exp1 body)
+      (cases answer
+             (type-of exp1 tenv subst)
+             (an-answer
+              (exp1-ty subst)
+              (let ([new-tenv
+                     (extend-tenv
+                      var2
+                      (pair-type->snd-type exp1-ty)
+                      (extend-tenv var1 (pair-type->fst-type exp1-ty) tenv))])
+                (type-of body new-tenv subst)))))
+     (list-exp (fst rest)
+               (cases answer
+                      (type-of fst tenv subst)
+                      (an-answer
+                       (fst-ty subst)
+                       (let loop ([rest rest] [subst subst])
+                         (if (null? rest)
+                             (an-answer (list-type fst-ty) subst)
+                             (cases answer
+                                    (type-of (car rest) tenv subst)
+                                    (an-answer
+                                     (ty subst)
+                                     (let ([new-subst
+                                            (unifier ty fst-ty subst exp)])
+                                       (loop (cdr rest) new-subst)))))))))
+     (cons-exp
+      (fst snd)
+      (cases
+       answer
+       (type-of fst tenv subst)
+       (an-answer
+        (fst-ty subst)
+        (cases answer
+               (type-of snd tenv subst)
+               (an-answer
+                (snd-ty subst)
+                (let ([subst (unifier (list-type fst-ty) snd-ty subst exp)])
+                  (an-answer snd-ty subst)))))))
+     (null?-exp
+      (exp1)
+      (cases answer
+             (type-of exp1 tenv subst)
+             (an-answer
+              (exp1-ty subst)
+              (let ([tvar1 (fresh-tvar-type)])
+                (let ([subst (unifier (list-type tvar1) exp1-ty subst exp1)])
+                  (an-answer (bool-type) subst))))))
+     (emptylist-exp () (an-answer (list-type (fresh-tvar-type)) subst))
+     (car-exp
+      (exp1)
+      (cases answer
+             (type-of exp1 tenv subst)
+             (an-answer
+              (exp1-ty subst)
+              (let ([tvar1 (fresh-tvar-type)])
+                (let ([subst (unifier (list-type tvar1) exp1-ty subst exp1)])
+                  (an-answer tvar1 subst))))))
+     (cdr-exp
+      (exp1)
+      (cases answer
+             (type-of exp1 tenv subst)
+             (an-answer
+              (exp1-ty subst)
+              (let ([tvar1 (fresh-tvar-type)])
+                (let ([subst (unifier (list-type tvar1) exp1-ty subst exp1)])
+                  (an-answer exp1-ty subst))))))
+     (let-exp (var exp1 body)
+              (cases answer
+                     (type-of exp1 tenv subst)
+                     (an-answer
+                      (rhs-type subst)
+                      (type-of body (extend-tenv var rhs-type tenv) subst))))
+     (proc-exp (var otype body)
+               (let ([arg-type (otype->type otype)])
+                 (cases answer
+                        (type-of body (extend-tenv var arg-type tenv) subst)
+                        (an-answer (result-type subst)
+                                   (an-answer (proc-type arg-type result-type)
+                                              subst)))))
+     (call-exp (rator rand)
+               (let ([result-type (fresh-tvar-type)])
+                 (cases answer
+                        (type-of rator tenv subst)
+                        (an-answer
+                         (rator-type subst)
+                         (cases answer
+                                (type-of rand tenv subst)
+                                (an-answer
+                                 (rand-type subst)
+                                 (let ([subst (unifier rator-type
+                                                       (proc-type rand-type
+                                                                  result-type)
+                                                       subst
+                                                       exp)])
+                                   (an-answer result-type subst))))))))
+     (letrec-exp
+      (proc-result-otype proc-name bvar proc-arg-otype proc-body letrec-body)
+      (let ([proc-result-type (otype->type proc-result-otype)]
+            [proc-arg-type (otype->type proc-arg-otype)])
+        (let ([tenv-for-letrec-body
+               (extend-tenv proc-name
+                            (proc-type proc-arg-type proc-result-type)
+                            tenv)])
+          (cases
+           answer
+           (type-of proc-body
+                    (extend-tenv bvar proc-arg-type tenv-for-letrec-body)
+                    subst)
+           (an-answer
+            (proc-body-type subst)
+            (let ([subst
+                   (unifier proc-body-type proc-result-type subst proc-body)])
+              (type-of letrec-body tenv-for-letrec-body subst))))))))))
 ; TvarTypeSym = a symbol ending with a digit
 ; A-list = Listof(Pair(TvarTypeSym, TvarTypeSym))
 ; equal-up-to-gensyms? : S-exp × S-exp → Bool
@@ -806,15 +789,16 @@
        in let f = (map proc(x: int) -(x, 1))
           in let g = (map even)
           in newpair(f, g)")
-(type-eq? str25 '(pair-type ((list-type int) -> (list-type int)) * ((list-type int) -> (list-type bool))))
+(type-eq? str25
+          '(pair-type ((list-type int) -> (list-type int))
+                      *
+                      ((list-type int) -> (list-type bool))))
 
-(define str26
-  "letrec ? f(x: ?) = x
+(define str26 "letrec ? f(x: ?) = x
    in newpair((f zero?(0)), (f 13))")
 (type-eq? str26 '(pair-type bool * int))
 
-(define str27
-  "letrec ? f(x: ?) = (f x)
+(define str27 "letrec ? f(x: ?) = (f x)
    in newpair((f zero?(0)), (f 13))")
 (type-eq? str27 '(pair-type tvar0 * tvar1))
 #|
