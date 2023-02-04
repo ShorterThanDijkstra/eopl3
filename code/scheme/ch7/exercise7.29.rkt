@@ -344,7 +344,10 @@
        (exp1)
        (cases answer
          (type-of exp1 (init-tenv) (empty-subst))
-         (an-answer (ty subst) (apply-subst-to-type ty subst)))))))
+         (an-answer (ty subst)
+                    ; (display subst)
+                    ; (newline)
+                    (apply-subst-to-type ty subst)))))))
 
 (define type-of-let-polymorphism
   (lambda (exp tenv subst)
@@ -920,4 +923,5 @@
 ; (:t str29) ;should fail
 
 (define str30 "proc(y: ?) let f = proc(x: ?) y in (f 1)")
-; (type-eq? str30 '(t0 -> t0)) ; should not fail, but I don't know how to do
+(type-eq? str30 '(t0 -> t0)) ; should not fail, but I don't know how to fix it
+; https://jeremymikkola.com/posts/2018_03_25_understanding_algorithm_w.html
