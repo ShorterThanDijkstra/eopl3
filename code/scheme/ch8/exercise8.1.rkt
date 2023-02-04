@@ -430,16 +430,16 @@
 ;; type-of-program : Program -> Type
 (define type-of-program
   (lambda (pgm)
-    (cases program
-           pgm
-           (a-program (module-defs body)
-                      (type-of body
-                               (add-module-defns-to-tenv module-defs
-                                                         (empty-tenv)))))))
+    (cases
+     program
+     pgm
+     (a-program
+      (module-defs body)
+      (type-of body (add-module-defns-to-tenv module-defs '() (empty-tenv)))))))
 
 ;; add-module-defns-to-tenv : Listof(ModuleDefn) * Tenv -> Tenv
 (define add-module-defns-to-tenv
-  (lambda (defns tenv)
+  (lambda (defns m-names tenv)
     (if (null? defns)
         tenv
         (cases
@@ -447,14 +447,21 @@
          (car defns)
          (a-module-definition
           (m-name expected-iface m-body)
-          (let ([actual-iface (interface-of m-body tenv)])
-            (if (<:-iface actual-iface expected-iface tenv)
-                (let ([new-tenv
-                       (extend-tenv-with-module m-name expected-iface tenv)])
-                  (add-module-defns-to-tenv (cdr defns) new-tenv))
-                (report-module-doesnt-satisfy-iface m-name
-                                                    expected-iface
-                                                    actual-iface))))))))
+          (if (memq m-name m-names)
+              (eopl:error 'add-module-defns-to-tenv
+                          "mudule name conflict: ~s"
+                          m-name)
+              (let ([actual-iface (interface-of m-body tenv)])
+                (if (<:-iface actual-iface expected-iface tenv)
+                    (let ([new-tenv (extend-tenv-with-module m-name
+                                                             expected-iface
+                                                             tenv)])
+                      (add-module-defns-to-tenv (cdr defns)
+                                                (cons m-name m-names)
+                                                new-tenv))
+                    (report-module-doesnt-satisfy-iface m-name
+                                                        expected-iface
+                                                        actual-iface)))))))))
 
 ;; interface-of : ModuleBody * Tenv -> Iface
 (define interface-of
@@ -701,3 +708,19 @@
     -(from m1 take u, from m2 take v)")
 ; (:e str4) ;should fail
 ; (:t str4) ;should fail
+
+(define str5
+  "module m1
+      interface
+        [u : int]
+      body
+        [u = 44]
+   module m1
+      interface
+       [v : int]
+      body
+       [v = -(from m1 take u,
+              11)]
+   from m1 take v")
+(check-equal? (:e str5) (num-val 33))
+; (:t str5) ; should fail
