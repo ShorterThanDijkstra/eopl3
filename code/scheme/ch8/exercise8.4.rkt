@@ -25,18 +25,19 @@
     (expression ("zero?" "(" expression ")") zero?-exp)
     (expression ("if" expression "then" expression "else" expression) if-exp)
     (expression (identifier) var-exp)
-    (expression ("let" identifier "=" expression "in" expression) let-exp)
-    (expression ("proc" "(" identifier ":" type ")" expression) proc-exp)
-    (expression ("(" expression expression ")") call-exp)
-    (expression ("letrec" type
-                          identifier
-                          "("
-                          identifier
-                          ":"
-                          type
-                          ")"
-                          "="
-                          expression
+    (expression ("let" (arbno identifier "=" expression) "in" expression)
+                let-exp)
+    (expression
+     ("proc" "(" (separated-list identifier ":" type ",") ")" expression)
+     proc-exp)
+    (expression ("(" expression (arbno expression) ")") call-exp)
+    (expression ("letrec" (arbno type
+                                 identifier
+                                 "("
+                                 (separated-list identifier ":" type ",")
+                                 ")"
+                                 "="
+                                 expression)
                           "in"
                           expression)
                 letrec-exp)
@@ -45,7 +46,7 @@
     ; (type ("from" identifier "take" identifier) qualified-type)
     (type ("int") int-type)
     (type ("bool") bool-type)
-    (type ("(" type "->" type ")") proc-type)))
+    (type ("(" (separated-list type "*") "->" type ")") proc-type)))
 
 (sllgen:make-define-datatypes the-lexical-spec the-grammar)
 
@@ -60,35 +61,43 @@
 (define proc-type?
   (lambda (ty) (cases type ty (proc-type (t1 t2) #t) (else #f))))
 
-(define proc-type->arg-type
+(define proc-type->args-types
   (lambda (ty)
-    (cases type
-           ty
-           (proc-type (arg-type result-type) arg-type)
-           (else (eopl:error 'proc-type->arg-type "Not a proc type: ~s" ty)))))
+    (cases
+     type
+     ty
+     (proc-type (args-types result-type) args-types)
+     (else (eopl:error 'proc-type->args-types "Not a proc type: ~s" ty)))))
 
 (define proc-type->result-type
   (lambda (ty)
     (cases
      type
      ty
-     (proc-type (arg-type result-type) result-type)
-     (else (eopl:error 'proc-type->result-types "Not a proc type: ~s" ty)))))
+     (proc-type (args-types result-type) result-type)
+     (else (eopl:error 'proc-type->result-type "Not a proc type: ~s" ty)))))
 
 (define type-to-external-form
   (lambda (ty)
-    (cases type
-           ty
-           (int-type () 'int)
-           (bool-type () 'bool)
-           (proc-type (arg-type result-type)
-                      (list (type-to-external-form arg-type)
-                            '->
-                            (type-to-external-form result-type)))
-           ;  (named-type (name) name)
-           ;  (qualified-type (modname varname)
-           ;                  (list 'from modname 'take varname))
-           )))
+    (cases
+     type
+     ty
+     (int-type () 'int)
+     (bool-type () 'bool)
+     (proc-type (arg-types result-type)
+                (if (null? arg-types)
+                    (type-to-external-form result-type)
+                    (let loop ([first (car arg-types)] [rest (cdr arg-types)])
+                      (if (null? rest)
+                          (list (type-to-external-form first)
+                                '->
+                                (type-to-external-form result-type))
+                          (cons (type-to-external-form first)
+                                (cons '* (loop (car rest) (cdr rest))))))))
+     ;  (named-type (name) name)
+     ;  (qualified-type (modname varname)
+     ;                  (list 'from modname 'take varname))
+     )))
 
 ;; maybe-lookup-module-in-list : Sym * Listof(Defn) -> Maybe(Defn)
 (define maybe-lookup-module-in-list
@@ -170,10 +179,11 @@
   (lambda (variant value)
     (eopl:error 'expval-extractors "Looking for a ~s, found ~s" variant value)))
 
-(define-datatype
- proc
- proc?
- (procedure (bvar symbol?) (body expression?) (env environment?)))
+(define-datatype proc
+                 proc?
+                 (procedure (vars (list-of identifier?))
+                            (body expression?)
+                            (saved-env environment?)))
 
 ;;; module values
 (define-datatype typed-module
@@ -191,14 +201,21 @@
  environment?
  (empty-env)
  (extend-env (bvar symbol?) (bval expval?) (saved-env environment?))
- (extend-env-recursively (id symbol?)
-                         (bvar symbol?)
-                         (body expression?)
+ (extend-env-recursively (p-names (list-of symbol?))
+                         (b-varss (list-of (list-of symbol?)))
+                         (p-bodies (list-of expression?))
                          (saved-env environment?))
  (extend-env-with-module (m-name symbol?)
                          (m-val typed-module?)
                          (saved-env environment?)))
 
+(define extend-env*
+  (lambda (syms vals old-env)
+    (if (null? syms)
+        old-env
+        (extend-env* (cdr syms)
+                     (cdr vals)
+                     (extend-env (car syms) (car vals) old-env)))))
 (define apply-env
   (lambda (env search-sym)
     (cases
@@ -208,10 +225,14 @@
      (extend-env
       (bvar bval saved-env)
       (if (eqv? search-sym bvar) bval (apply-env saved-env search-sym)))
-     (extend-env-recursively (id bvar body saved-env)
-                             (if (eqv? search-sym id)
-                                 (proc-val (procedure bvar body env))
-                                 (apply-env saved-env search-sym)))
+     (extend-env-recursively
+      (p-names b-vars p-bodies saved-env)
+      (let loop ([p-names p-names] [b-vars b-vars] [p-bodies p-bodies])
+        (cond
+          [(null? p-names) (apply-env saved-env search-sym)]
+          [(eqv? search-sym (car p-names))
+           (proc-val (procedure (car b-vars) (car p-bodies) env))]
+          [else (loop (cdr p-names) (cdr b-vars) (cdr p-bodies))])))
      (extend-env-with-module (m-name m-val saved-env)
                              (apply-env saved-env search-sym)))))
 
@@ -285,6 +306,17 @@
           (raise-tenv-lookup-failure-error 'module search-sym tenv)))))
 
 (define apply-tenv lookup-variable-name-in-tenv)
+
+(define extend-tenv*
+  (lambda (vars types tenv)
+    (if (not (= (length vars) (length types)))
+        (eopl:error 'extend-tenv*)
+        (let loop ([vars vars] [types types])
+          (if (null? vars)
+              tenv
+              (extend-tenv (car vars)
+                           (car types)
+                           (loop (cdr vars) (cdr types))))))))
 
 (define raise-tenv-lookup-failure-error
   (lambda (kind var tenv)
@@ -363,6 +395,13 @@
 
 ;;;;;;;;;;;;;;;; The Type Checker ;;;;;;;;;;;;;;;;
 
+(define report-rator-not-a-proc-type
+  (lambda (rator-type rator)
+    (eopl:error 'type-of-expression
+                "Rator not a proc type:~%~s~%had rator type ~s"
+                rator
+                (type-to-external-form rator-type))))
+
 ;; type-of : Exp * Tenv -> Type
 (define type-of
   (lambda (exp tenv)
@@ -390,41 +429,42 @@
      ;; lookup-qualified-var-in-tenv defined on page 285.
      (qualified-var-exp (m-name var-name)
                         (lookup-qualified-var-in-tenv m-name var-name tenv))
-     (let-exp (var exp1 body)
-              (let ([rhs-type (type-of exp1 tenv)])
-                (type-of body (extend-tenv var rhs-type tenv))))
-     (proc-exp
-      (bvar bvar-type body)
-      (let ([expanded-bvar-type (expand-type bvar-type tenv)])
-        (let ([result-type
-               (type-of body (extend-tenv bvar expanded-bvar-type tenv))])
-          (proc-type expanded-bvar-type result-type))))
+     (let-exp (vars exps body)
+              (let ([types (map (lambda (exp) (type-of exp tenv)) exps)])
+                (type-of body (extend-tenv* vars types tenv))))
+     (proc-exp (vars var-types body)
+               (let ([result-type
+                      (type-of body (extend-tenv* vars var-types tenv))])
+                 (proc-type var-types result-type)))
      (call-exp
-      (rator rand)
-      (let ([rator-type (type-of rator tenv)] [rand-type (type-of rand tenv)])
+      (rator rands)
+      (let ([rator-type (type-of rator tenv)]
+            [rand-types (map (lambda (rand) (type-of rand tenv)) rands)])
         (cases type
                rator-type
-               (proc-type (arg-type result-type)
+               (proc-type (arg-types result-type)
                           (begin
-                            (check-equal-type! arg-type rand-type rand)
+                            (check-equal-type! arg-types rand-types rands)
                             result-type))
-               (else (eopl:error 'type-of
-                                 "Rator not a proc type:~%~s~%had rator type ~s"
-                                 rator
-                                 (type-to-external-form rator-type))))))
+               (else (report-rator-not-a-proc-type rator-type rator)))))
      (letrec-exp
-      (proc-result-type proc-name bvar bvar-type proc-body letrec-body)
+      (p-result-types p-names b-varss b-varss-types p-bodies letrec-body)
       (let ([tenv-for-letrec-body
-             (extend-tenv
-              proc-name
-              (expand-type (proc-type bvar-type proc-result-type) tenv)
-              tenv)])
-        (let ([proc-result-type (expand-type proc-result-type tenv)]
-              [proc-body-type (type-of proc-body
-                                       (extend-tenv bvar
-                                                    (expand-type bvar-type tenv)
-                                                    tenv-for-letrec-body))])
-          (check-equal-type! proc-body-type proc-result-type proc-body)
+             (extend-tenv* p-names
+                           (map (lambda (b-vars-types p-result-type)
+                                  (proc-type b-vars-types p-result-type))
+                                b-varss-types
+                                p-result-types)
+                           tenv)])
+        (let ([p-body-types
+               (map (lambda (p-body b-vars b-vars-types)
+                      (type-of
+                       p-body
+                       (extend-tenv* b-vars b-vars-types tenv-for-letrec-body)))
+                    p-bodies
+                    b-varss
+                    b-varss-types)])
+          (check-equal-type! p-body-types p-result-types p-bodies)
           (type-of letrec-body tenv-for-letrec-body)))))))
 
 (define init-tenv
@@ -536,10 +576,7 @@
   (lambda ()
     (extend-env 'true
                 (bool-val #t)
-                (extend-env 'false
-                            (bool-val #f)
-                            (empty-env)))))
-
+                (extend-env 'false (bool-val #f) (empty-env)))))
 ;; value-of-program : Program -> Expval
 (define value-of-program
   (lambda (pgm)
@@ -599,50 +636,50 @@
 (define value-of
   (lambda (exp env)
 
-    (cases expression
-           exp
-           (const-exp (num) (num-val num))
-           (var-exp (var) (apply-env env var))
-           (qualified-var-exp (m-name var-name)
-                              (lookup-qualified-var-in-env m-name var-name env))
-           (diff-exp (exp1 exp2)
-                     (let ([val1 (expval->num (value-of exp1 env))]
-                           [val2 (expval->num (value-of exp2 env))])
-                       (num-val (- val1 val2))))
-           (zero?-exp (exp1)
-                      (let ([val1 (expval->num (value-of exp1 env))])
-                        (if (zero? val1) (bool-val #t) (bool-val #f))))
-           (if-exp (exp0 exp1 exp2)
-                   (if (expval->bool (value-of exp0 env))
-                       (value-of exp1 env)
-                       (value-of exp2 env)))
-           (let-exp (var exp1 body)
-                    (let ([val (value-of exp1 env)])
-                      (let ([new-env (extend-env var val env)])
-                        ;; (eopl:pretty-print new-env)
-                        (value-of body new-env))))
-           (proc-exp (bvar ty body) (proc-val (procedure bvar body env)))
-           (call-exp (rator rand)
-                     (let ([proc (expval->proc (value-of rator env))]
-                           [arg (value-of rand env)])
-                       (apply-procedure proc arg)))
-           (letrec-exp
-            (ty1 proc-name bvar ty2 proc-body letrec-body)
-            (value-of letrec-body
-                      (extend-env-recursively proc-name bvar proc-body env))))))
+    (cases
+     expression
+     exp
+     (const-exp (num) (num-val num))
+     (var-exp (var) (apply-env env var))
+     (qualified-var-exp (m-name var-name)
+                        (lookup-qualified-var-in-env m-name var-name env))
+     (diff-exp (exp1 exp2)
+               (let ([val1 (expval->num (value-of exp1 env))]
+                     [val2 (expval->num (value-of exp2 env))])
+                 (num-val (- val1 val2))))
+     (zero?-exp (exp1)
+                (let ([val1 (expval->num (value-of exp1 env))])
+                  (if (zero? val1) (bool-val #t) (bool-val #f))))
+     (if-exp (exp0 exp1 exp2)
+             (if (expval->bool (value-of exp0 env))
+                 (value-of exp1 env)
+                 (value-of exp2 env)))
+     (let-exp (vars exps body)
+              (let ([vals (map (lambda (exp1) (value-of exp1 env)) exps)])
+                (value-of body (extend-env* vars vals env))))
+     (proc-exp (bvars tys body) (proc-val (procedure bvars body env)))
+     (call-exp (rator rands)
+               (let ([proc (expval->proc (value-of rator env))]
+                     [args (map (lambda (rand) (value-of rand env)) rands)])
+                 (apply-procedure proc args)))
+     (letrec-exp
+      (tys1 p-names b-varss tys2 p-bodies letrec-body)
+      (value-of letrec-body
+                (extend-env-recursively p-names b-varss p-bodies env))))))
 
 ;; apply-procedure : Proc * ExpVal -> ExpVal
 (define apply-procedure
-  (lambda (proc1 arg)
+  (lambda (proc1 args)
     (cases proc
            proc1
-           (procedure (var body saved-env)
-                      (value-of body (extend-env var arg saved-env))))))
+           (procedure (vars body saved-env)
+                      (value-of body (extend-env* vars args saved-env))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; test
 (define :e (lambda (str) (value-of-program (scan&parse str))))
-(define :t (lambda (str) (type-to-external-form (type-of-program (scan&parse str)))))
+(define :t
+  (lambda (str) (type-to-external-form (type-of-program (scan&parse str)))))
 
 (define str0
   "module m1
@@ -714,3 +751,71 @@
     -(from m1 take u, from m2 take v)")
 ; (:e str4) ;should fail
 ; (:t str4) ;should fail
+
+(define str5
+  "
+  module m1
+    interface [f: (int * bool * (int * int * bool -> bool) -> int)]
+    body [f = proc(x: int, y: bool, z: (int * int * bool -> bool))
+                 if (z 10 11 true)
+                 then 12
+                 else if y
+                      then x
+                      else -(x, 1)]
+   let z = proc(a: int, b: int, c: bool) if zero?(-(a, b)) then c else zero?(1)
+   in (from m1 take f 13 false z)")
+(check-equal? (:e str5) (num-val 12))
+(check-equal? (:t str5) 'int)
+
+(define str6
+  "module m1
+     interface [v: int]
+     body [v = 0]
+  proc() from m1 take v")
+(check-equal?
+ (:e str6)
+ (proc-val (procedure '()
+                      (qualified-var-exp 'm1 'v)
+                      (extend-env-with-module
+                       'm1
+                       (simple-module (extend-env 'v (num-val 0) (empty-env)))
+                       (extend-env
+                        'true
+                        (bool-val #t)
+                        (extend-env 'false (bool-val #f) (empty-env)))))))
+(check-equal? (:t str6) 'int)
+
+(define str7
+  "module m1
+     interface [f: (int * int -> bool)]
+     body [f = proc(a: int, b: int)
+                 zero?(-(a, b))]
+  module m2
+     interface [g: (int * int * (int * int -> bool) -> bool)]
+     body [g =  proc(a: int, b: int, c:(int * int -> bool))
+                  if (c a b) then false else true]
+  let x = 11
+       y = 13
+       f = from m1 take f
+       g = from m2 take g
+   in (g x y f)")
+(check-equal? (:e str7) (bool-val #t))
+(check-equal? (:t str7) 'bool)
+
+(define str8
+  "module m1
+     interface [add: (int * int -> int)]
+     body [add = letrec int foo(a: int, b: int) = -(a, -(0, b))
+                 in foo]
+   module m2
+     interface [mul: (int * int -> int)]
+     body [mul = let add = from m1 take add
+                 in letrec int foo(a: int, b: int) = if zero?(b) then 0 else (add a (foo a -(b, 1)))
+                    in foo]
+  let mul = from m2 take mul
+  in letrec
+       int fib(a: int, b: int, n: int) = if zero?(n) then b else (fib b -(a, -(0, b)) -(n, 1))
+       int factk(n: int, k: (int -> int)) = if zero?(n) then (k 1) else (factk -(n, 1) proc(v0: int) (k (mul v0 n)))
+     in -((factk 10 proc(x: int) x), (fib 0 1 10))")
+(check-equal? (:t str8) 'int)
+(check-equal? (:e str8) (num-val 3628711))
