@@ -12,3 +12,5 @@
 * exercise 6.30
 * exercise 6.34
 * exercise 6.35
+* exercise 8.10
+* exercise 8.11
