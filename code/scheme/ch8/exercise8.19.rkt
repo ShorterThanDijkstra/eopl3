@@ -1,5 +1,9 @@
 #lang eopl
-#|
+(require rackunit)
+(require "PROC-MODULES.rkt")
+
+(define ans
+"
 module ints1
   interface
     [opaque t
@@ -77,12 +81,24 @@ body
                   in letrec from ints take t from-int(i: int)
                                                = if zero?(i)
                                                  then zero
-                                                 else (succ (from-int -(i, 1))
-let from-int1 = from (from-int-maker ints1) take from-int
-in let from-int2 = from (from-int-maker ints2) take from-int                                                           
+                                                 else (succ (from-int -(i, 1)))
+                      in from-int]
+
+module from-ints1
+   interface [from-int: (int -> from ints1 take t)]
+   body (from-int-maker ints1)
+
+module from-ints2
+   interface [from-int: (int -> from ints2 take t)]
+   body (from-int-maker ints2)
+                                                                                                                                                                                                                                                                                                      
+let from-int1 = from from-ints1 take from-int
+in let from-int2 = from from-ints2 take from-int                                                           
 in let two1 = (from-int1 2) %from ints1 take t
 in let two2 = (from-int2 2) %from ints2 take t
 in let to-ints1 = from ints1-to-int take to-int
 in let to-ints2 = from ints2-to-int take to-int
 in -((to-ints1 two1), (to-ints2 two2))
-|#
+")
+(check-equal? (:t ans) 'int)
+(check-equal? (:e ans) (num-val 0))

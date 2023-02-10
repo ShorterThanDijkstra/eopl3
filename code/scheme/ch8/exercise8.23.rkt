@@ -1,5 +1,9 @@
 #lang eopl
-#|
+(require rackunit)
+(require "PROC-MODULES.rkt")
+
+(define ans
+"
 module mybool
   interface
     [opaque t
@@ -19,19 +23,6 @@ module mybool
             if zero?(x) then true else false
     to-bool = proc (x : t)
                if zero?(x) then zero?(1) else zero?(0)]
-
-module mybool-tables
-  interface
-    [opaque table
-    empty : table
-    add-to-table : (int ->
-                     (from mybool take t ->
-                       (table -> table)))
-    lookup-in-table : (int ->
-                       (table ->
-                         from mybool take t))]
-  body
-    (table-of mybool)
 
 module table-of
   interface
@@ -64,6 +55,19 @@ module table-of
                             else (saved search)
      lookup-in-table = proc(search: int)
                          proc(t: table)
-                           (t search)])
-      
-|#
+                           (t search)]
+module mybool-tables
+  interface
+    [opaque table
+    empty : table
+    add-to-table : (int ->
+                     (from mybool take t ->
+                       (table -> table)))
+    lookup-in-table : (int ->
+                       (table ->
+                         from mybool take t))]
+  body
+    (table-of mybool)
+13
+")
+; (:t ans) ; I don't know why does this fail
