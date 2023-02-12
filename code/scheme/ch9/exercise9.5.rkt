@@ -196,7 +196,7 @@
                  method?
                  (a-method (vars (list-of symbol?))
                            (body expression?)
-                           (super-name symbol?)
+                           (host-name symbol?)
                            (field-names (list-of symbol?))))
 
 ;;;;;;;;;;;;;;;; method environments ;;;;;;;;;;;;;;;;
@@ -235,7 +235,7 @@
 ;; method-decls->method-env :
 ;; Listof(MethodDecl) * ClassName * Listof(FieldName) -> MethodEnv
 (define method-decls->method-env
-  (lambda (m-decls super-name field-names)
+  (lambda (m-decls host-name field-names)
     (map
      (lambda (m-decl)
        (cases method-decl
@@ -243,7 +243,7 @@
               (a-method-decl
                (method-name vars body)
                (list method-name
-                     (a-method vars body super-name field-names)))))
+                     (a-method vars body host-name field-names)))))
      m-decls)))
 
 ;;;;;;;;;;;;;;;; classes ;;;;;;;;;;;;;;;;
@@ -301,7 +301,7 @@
                         (merge-method-envs
                          (class->method-env (lookup-class s-name))
                          (method-decls->method-env m-decls
-                                                   s-name
+                                                   c-name
                                                    f-names)))))))))
 
 ;; exercise:  rewrite this so there's only one set! to the-class-env.
@@ -705,17 +705,19 @@
   (lambda (m self args)
     (cases method
            m
-           (a-method (vars body super-name field-names)
-                     (value-of body
-                               (extend-env
-                                vars
-                                (map newref args)
-                                (extend-env-with-self-and-super
-                                 self
-                                 super-name
-                                 (extend-env field-names
-                                             (object->fields self)
-                                             (empty-env)))))))))
+           (a-method (vars body host-name field-names)
+                     (let ([c (lookup-class host-name)])
+                       (let ([super-name (class->super-name c)])
+                         (value-of body
+                                   (extend-env
+                                    vars
+                                    (map newref args)
+                                    (extend-env-with-self-and-super
+                                     self
+                                     super-name
+                                     (extend-env field-names
+                                                 (object->fields self)
+                                                 (empty-env)))))))))))
 
 (define values-of-exps
   (lambda (exps env) (map (lambda (exp) (value-of exp env)) exps)))
@@ -733,7 +735,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; test
 (require rackunit)
-
 
 (define str0
   "
