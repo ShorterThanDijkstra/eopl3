@@ -706,6 +706,9 @@
     (cases method
            m
            (a-method (vars body super-name field-names)
+                    ;  (eopl:pretty-print field-names)
+                    ;  (eopl:pretty-print (map deref (object->fields self)))
+                    ;  (display "-----------------------------\n")
                      (value-of body
                                (extend-env
                                 vars
@@ -947,3 +950,42 @@
   let o3 = new c3()
    in send o3 m3()")
 (check-equal? (:e str8) (num-val 33))
+
+(define str9
+  "class c1 extends object
+     field x
+     method initialize() set x = 3
+   class c2 extends c1
+     field y
+     method initialize()
+       begin
+         super initialize();
+         set y = 5
+       end
+     method get_x() x
+     method get_y() y
+  
+   let o2 = new c2()
+   in list(send o2 get_x(), send o2 get_y())")
+(check-equal? (:e str9) (list-val (list (num-val 3) (num-val 5))))
+
+(define str10
+  "class c1 extends object
+     field x
+     method initialize() set x = 37
+     method m1() x
+     method m2() send self m1()
+   class c2 extends c1
+     field y
+     method initialize() begin super initialize();
+                               set y = 3
+                         end
+
+   let o2 = new c2()
+   in send o2 m2()")
+(check-equal? (:e str10) (num-val 37))
+#|
+when apply-method m2, field-names is '(x), (object->fields self) is '(37 3)
+|#
+
+  

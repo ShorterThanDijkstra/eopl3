@@ -43,7 +43,6 @@
     (expression ("set" identifier "=" expression) assign-exp)
     (expression ("list" "(" (separated-list expression ",") ")")
                 list-exp)
-    (expression ("instanceof" expression identifier) instance-exp)
     ;; new productions for oop
     (class-decl ("class" identifier
                          "extends"
@@ -60,6 +59,8 @@
     (expression
      ("new" identifier "(" (separated-list expression ",") ")")
      new-object-exp)
+    (expression ("fieldref" expression identifier) fieldref-exp)
+    (expression ("fieldset" expression identifier "=" expression) fieldset-exp)
     ;; this is special-cased to prevent it from mutation
     (expression ("self") self-exp)
     (expression ("send" expression
@@ -361,17 +362,6 @@
 
 (define maybe (lambda (pred) (lambda (v) (or (not v) (pred v)))))
 
-(define instance?
-  (lambda (obj c-name)
-        (let loop  ([root-c-name (object->class-name obj)])
-          (if root-c-name
-              (if (eqv? root-c-name c-name)
-                  #t
-                  (let ([s-name (class->super-name (lookup-class root-c-name))])
-                    (loop s-name)))
-              #f))))
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; data structures
 
@@ -670,9 +660,6 @@
            (list-val (vals) (list-val (cons val1 vals)))
            (else (eopl:error 'value-of exp)))))
       ;; new cases for CLASSES language
-      (instance-exp (exp1 c-name)
-                    (let ([obj (value-of exp1 env)])
-                      (bool-val (instance? obj c-name))))
       (new-object-exp
        (class-name rands)
        (let ([args (values-of-exps rands env)]
@@ -680,6 +667,23 @@
          (apply-method (find-method class-name 'initialize) obj args)
          obj))
       (self-exp () (apply-env env '%self))
+      (fieldref-exp (exp1 f-name)
+                    (let ([obj (value-of exp1 env)])
+                      (let ([f-names (class->field-names (lookup-class (object->class-name obj)))])
+                        (let ([index (location f-name f-names)])
+                          (if index
+                              (deref (list-ref (object->fields obj) index))
+                              (eopl:error 'value-of))))))
+      (fieldset-exp (exp1 f-name exp2)
+                    (let ([obj (value-of exp1 env)]
+                          [val (value-of exp2 env)])
+                      (let ([f-names (class->field-names (lookup-class (object->class-name obj)))]
+                            [fields (object->fields obj)])
+                        (let ([index (location f-name f-names)])
+                          (if index
+                              (begin (setref! (list-ref fields index) val)
+                                     obj)
+                              (eopl:error 'value-of))))))
       (method-call-exp
        (obj-exp method-name rands)
        (let ([args (values-of-exps rands env)]
@@ -963,18 +967,68 @@
    in send o3 m3()")
 (check-equal? (:e str8) (num-val 33))
 
-;;; no initialize method of object class, so we cannot test *instanceof new object object*
 (define str9
   "class c1 extends object
-     method initialize() 3
+     field x
+     method initialize() set x = 3
    class c2 extends c1
-     method initialize() super initialize()
-   class c3 extends object
-     method initialize() 5
-     
-   let o1 = new c1()
-       o2 = new c2()
-       o3 = new c3()
-   in list(instanceof o2 c1, instanceof o1 c1, instanceof o3 c1, instanceof o3 object)")
-(check-equal? (:e str9)
-              (list-val (list (bool-val #t) (bool-val #t) (bool-val #f) (bool-val #t))))
+     field y
+     method initialize()
+       begin
+         super initialize();
+         set y = 5
+       end
+     method get_x() x
+     method get_y() y
+   
+   let o2 = new c2()
+   in list(send o2 get_x(), send o2 get_y())")
+(check-equal? (:e str9) (list-val (list (num-val 3) (num-val 5))))
+
+(define str10
+  "class c1 extends object
+     field x
+     method initialize() set x = 3
+   class c2 extends c1
+     field y
+     method initialize() begin
+                           super initialize();
+                           set y = 5
+                         end
+    let o1 = new c1()
+    in let o2 = new c2()
+    in list(fieldref o1 x, fieldref o2 x)")
+(check-equal? (:e str10) (list-val (list (num-val 3) (num-val 3))))
+
+(define str11
+  "class c1 extends object
+     field x
+     method initialize() set x = 3
+   class c2 extends c1
+     field y
+     method initialize() begin
+                           super initialize();
+                           set y = 5
+                         end
+    let o1 = new c1()
+    in let o2 = new c2()
+    in fieldref o1 y")
+;  (:e str11) ; should fail
+
+(define str12
+  "class c1 extends object
+     field x
+     method initialize() set x = 3
+   class c2 extends c1
+     field y
+     method initialize()
+       begin
+         super initialize();
+         set y = 5
+       end
+    let o1 = new c1()
+    in let o2 = new c2()
+    in let void = fieldset o1 x = 37
+    in let void = fieldset o2 y = 73
+    in list(fieldref o1 x, fieldref o2 y)")
+(check-equal? (:e str12) (list-val (list (num-val 37) (num-val 73))))
