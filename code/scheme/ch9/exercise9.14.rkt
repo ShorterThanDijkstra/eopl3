@@ -180,15 +180,21 @@
 (define-datatype object
                  object?
                  (an-object (class-name identifier?)
-                            (fields (list-of reference?))))
+                            (fields (list-of reference?))
+                            (super (maybe object?))))
 
 ;; new-object : ClassName -> Obj
 (define new-object
   (lambda (class-name)
-    (an-object class-name
-               (map (lambda (field-name)
-                      (newref (list 'uninitialized-field field-name)))
-                    (class->field-names (lookup-class class-name))))))
+    (if class-name
+        (let ([clazz (lookup-class class-name)])
+          (an-object class-name
+                     (map (lambda (field-name)
+                            (newref (list 'uninitialized-field
+                                          field-name)))
+                          (class->field-names clazz))
+                     (new-object (class->super-name clazz))))
+        #f)))
 
 ;;;;;;;;;;;;;;;; methods and method environments ;;;;;;;;;;;;;;;;
 
@@ -196,7 +202,7 @@
                  method?
                  (a-method (vars (list-of symbol?))
                            (body expression?)
-                           (super-name symbol?)
+                           (host-name symbol?)
                            (field-names (list-of symbol?))))
 
 ;;;;;;;;;;;;;;;; method environments ;;;;;;;;;;;;;;;;
@@ -219,11 +225,14 @@
 ;; find-method : Sym * Sym -> Method
 (define find-method
   (lambda (c-name name)
-    (let ([m-env (class->method-env (lookup-class c-name))])
-      (let ([maybe-pair (assq name m-env)])
-        (if (pair? maybe-pair)
-            (cadr maybe-pair)
-            (report-method-not-found name))))))
+    (if c-name
+        (let ([clazz (lookup-class c-name)])
+          (let ([m-env (class->method-env clazz)])
+            (let ([maybe-pair (assq name m-env)])
+              (if (pair? maybe-pair)
+                  (cadr maybe-pair)
+                  (find-method (class->super-name clazz) name)))))
+        (report-method-not-found name))))
 
 (define report-method-not-found
   (lambda (name) (eopl:error 'find-method "unknown method ~s" name)))
@@ -235,7 +244,7 @@
 ;; method-decls->method-env :
 ;; Listof(MethodDecl) * ClassName * Listof(FieldName) -> MethodEnv
 (define method-decls->method-env
-  (lambda (m-decls super-name field-names)
+  (lambda (m-decls host-name field-names)
     (map
      (lambda (m-decl)
        (cases method-decl
@@ -243,7 +252,7 @@
               (a-method-decl
                (method-name vars body)
                (list method-name
-                     (a-method vars body super-name field-names)))))
+                     (a-method vars body host-name field-names)))))
      m-decls)))
 
 ;;;;;;;;;;;;;;;; classes ;;;;;;;;;;;;;;;;
@@ -291,18 +300,12 @@
            c-decl
            (a-class-decl
             (c-name s-name f-names m-decls)
-            (let ([f-names (append-field-names
-                            (class->field-names (lookup-class s-name))
-                            f-names)])
-              (add-to-class-env!
-               c-name
-               (a-class s-name
-                        f-names
-                        (merge-method-envs
-                         (class->method-env (lookup-class s-name))
-                         (method-decls->method-env m-decls
-                                                   s-name
-                                                   f-names)))))))))
+            (add-to-class-env!
+             c-name
+             (a-class
+              s-name
+              f-names
+              (method-decls->method-env m-decls c-name f-names)))))))
 
 ;; exercise:  rewrite this so there's only one set! to the-class-env.
 
@@ -343,11 +346,17 @@
 
 (define object->class-name
   (lambda (obj)
-    (cases object obj (an-object (class-name fields) class-name))))
+    (cases object
+           obj
+           (an-object (class-name fields super) class-name))))
 
 (define object->fields
   (lambda (obj)
-    (cases object obj (an-object (class-decl fields) fields))))
+    (cases object obj (an-object (class-decl fields super) fields))))
+
+(define object->super
+  (lambda (obj)
+    (cases object obj (an-object (class-decl fields super) super))))
 
 (define fresh-identifier
   (let ([sn 0])
@@ -700,25 +709,40 @@
             (eopl:printf "~%")))
         (value-of body new-env))))))
 
+(define extend-env-obj-chain
+  (lambda (obj)
+    (cases object
+           obj
+           (an-object
+            (c-name fields super-obj)
+            (if super-obj
+                (let ([clazz (lookup-class c-name)])
+                  (extend-env (class->field-names clazz)
+                              fields
+                              (extend-env-obj-chain super-obj)))
+                (empty-env))))))
+
 ;; apply-method : Method * Obj * Listof(ExpVal) -> ExpVal
 (define apply-method
   (lambda (m self args)
-    (cases method
-           m
-           (a-method (vars body super-name field-names)
-                    ;  (eopl:pretty-print field-names)
-                    ;  (eopl:pretty-print (map deref (object->fields self)))
-                    ;  (display "-----------------------------\n")
-                     (value-of body
-                               (extend-env
-                                vars
-                                (map newref args)
-                                (extend-env-with-self-and-super
-                                 self
-                                 super-name
-                                 (extend-env field-names
-                                             (object->fields self)
-                                             (empty-env)))))))))
+    (cases
+     method
+     m
+     (a-method
+      (vars body host-name field-names)
+      (let loop ([obj self])
+        (if obj
+            (if (eqv? (object->class-name obj) host-name)
+                (value-of body
+                          (extend-env vars
+                                      (map newref args)
+                                      (extend-env-with-self-and-super
+                                       obj
+                                       (class->super-name
+                                        (lookup-class host-name))
+                                       (extend-env-obj-chain obj))))
+                (loop (object->super obj)))
+            (eopl:error 'apply-method)))))))
 
 (define values-of-exps
   (lambda (exps env) (map (lambda (exp) (value-of exp env)) exps)))
@@ -736,7 +760,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; test
 (require rackunit)
-
 
 (define str0
   "
@@ -931,8 +954,8 @@
    (list-val
     (list (num-val 35)
           (list-val (list (num-val 15) (num-val 100) (num-val 200)))
-          (list-val (list (num-val 15) (num-val 100) (num-val 200)))))
-   (list-val (list (num-val 300) (num-val 35) (num-val 35))))))
+          (num-val 35)))
+   (list-val (list (num-val 35) (num-val 35) (num-val 35))))))
 
 (define str8
   "class c1 extends object
@@ -949,7 +972,7 @@
 
   let o3 = new c3()
    in send o3 m3()")
-(check-equal? (:e str8) (num-val 33))
+(check-equal? (:e str8) (num-val 13))
 
 (define str9
   "class c1 extends object
@@ -964,7 +987,7 @@
        end
      method get_x() x
      method get_y() y
-  
+
    let o2 = new c2()
    in list(send o2 get_x(), send o2 get_y())")
 (check-equal? (:e str9) (list-val (list (num-val 3) (num-val 5))))
@@ -984,16 +1007,55 @@
    let o2 = new c2()
    in send o2 m2()")
 (check-equal? (:e str10) (num-val 37))
-#|
-when apply-method m2, field-names is '(x), (object->fields self) is '(37 3)
-|#
 
 (define str11
   "class c1 extends object
      method initialize() 0
-     method m1() 11
-     method m1(v) +(v, 1)
-   let o1 = new c1()
-   in send o1 m1(2)")
-(check-equal? (:e str11) (num-val 11))
-     
+     method m1() 73
+     method m2() send self m1()
+   class c2 extends c1
+     method initialize() 0
+     method m1() 37
+   let o2 = new c2()
+   in send o2 m2()")
+(check-equal? (:e str11) (num-val 73))
+
+(define str12
+  "class c1 extends object
+     field x
+     method initialize() set x = 1
+     method m1() x
+     method m2() send self m1()
+   class c2 extends c1
+     method initialize() 0
+     method m1() 37
+     method setx(v) set x = v
+   let o2 = new c2()
+   in let void = send o2 setx(77)
+   in send o2 m2()")
+(check-equal? (:e str12) (num-val 77))
+
+(define str13
+  "class c1 extends object
+     method initialize() 0
+     method m1() self
+   class c2 extends c1
+     method initialize() 0
+   let o2 = new c2()
+   in send o2 m1()")
+(check-equal? (:e str13)
+              (an-object 'c1 '() (an-object 'object '() #f)))
+
+(define str14
+  "class c1 extends object
+     field x
+     method initialize() set x = 3
+     method m1() x
+   class c2 extends c1
+     field x
+     method initialize() begin super initialize();
+                               set x = 5
+                         end
+   let o2 = new c2()
+   in send o2 m1()")
+(check-equal? (:e str14) (num-val 3))

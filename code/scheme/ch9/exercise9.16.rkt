@@ -216,14 +216,26 @@
        cadr]
       [else #f])))
 
+(define method->args-num
+  (lambda (m)
+     (cases method
+            m
+            (a-method (vars body super-name field-names)
+                      (length vars)))))
+
 ;; find-method : Sym * Sym -> Method
 (define find-method
-  (lambda (c-name name)
+  (lambda (c-name name args-num)
     (let ([m-env (class->method-env (lookup-class c-name))])
-      (let ([maybe-pair (assq name m-env)])
-        (if (pair? maybe-pair)
-            (cadr maybe-pair)
-            (report-method-not-found name))))))
+      (let loop ([m-env m-env])
+        (if (null? m-env)
+            (report-method-not-found name)
+            (let ([fst (car m-env)])
+            (if (and (eqv? (car fst) name)
+                     (= args-num (method->args-num (cadr fst))))
+                (cadr fst)
+                (loop (cdr m-env)))))))))
+        
 
 (define report-method-not-found
   (lambda (name) (eopl:error 'find-method "unknown method ~s" name)))
@@ -662,7 +674,7 @@
       (class-name rands)
       (let ([args (values-of-exps rands env)]
             [obj (new-object class-name)])
-        (apply-method (find-method class-name 'initialize) obj args)
+        (apply-method (find-method class-name 'initialize (length args)) obj args)
         obj))
      (self-exp () (apply-env env '%self))
      (method-call-exp
@@ -670,7 +682,7 @@
       (let ([args (values-of-exps rands env)]
             [obj (value-of obj-exp env)])
         (apply-method
-         (find-method (object->class-name obj) method-name)
+         (find-method (object->class-name obj) method-name (length args))
          obj
          args)))
      (super-call-exp
@@ -678,7 +690,7 @@
       (let ([args (values-of-exps rands env)]
             [obj (apply-env env '%self)])
         (apply-method
-         (find-method (apply-env env '%super) method-name)
+         (find-method (apply-env env '%super) method-name (length args))
          obj
          args))))))
 
@@ -995,5 +1007,5 @@ when apply-method m2, field-names is '(x), (object->fields self) is '(37 3)
      method m1(v) +(v, 1)
    let o1 = new c1()
    in send o1 m1(2)")
-(check-equal? (:e str11) (num-val 11))
+(check-equal? (:e str11) (num-val 3))
      

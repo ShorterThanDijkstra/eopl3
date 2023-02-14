@@ -524,10 +524,22 @@
 
 ;;;;;;;;;;;;;;;; environment constructors and observers ;;;;;;;;;;;;;;;;
 (define find-field-c-name
-  (lambda (host-c-name search-sym) 'todo))
+  (lambda (caller-c-name search-sym)
+    (let loop ([res caller-c-name]
+               [s-name (class->super-name (lookup-class caller-c-name))])
+      (if s-name
+          (if (memq search-sym (class->field-names (lookup-class s-name)))
+              (loop s-name (class->super-name (lookup-class s-name)))
+              res)
+          (eopl:error 'find-field-c-name)))))
 
 (define accessible-field?
-  (lambda (acc field-c-name caller-c-name) 'todo))
+  (lambda (acc field-c-name caller-c-name)
+    (cases access acc
+           (public-acc () #t)
+           (protected-acc () (subclass? caller-c-name field-c-name))
+           (private-acc () (eqv? caller-c-name field-c-name)))))
+
 (define apply-env
   (lambda (env search-sym cler)
     (cases environment
@@ -558,6 +570,8 @@
                                            (global-caller () (eopl:error 'apply-env))
                                            (class-method-caller (caller-c-name)
                                                                 (let ([field-c-name (find-field-c-name caller-c-name search-sym)])
+                                                                  ; (display field-c-name)
+                                                                  ; (newline)
                                                                   (if (accessible-field? (list-ref f-accs index) field-c-name caller-c-name)
                                                                       (list-ref vals index)
                                                                       (eopl:error 'apply-env "field is not accessible, ~s" search-sym)))))
@@ -1152,5 +1166,27 @@
    in send o2 m1()")
 
 (check-equal? (:e str16) (num-val 30))
-     
-     
+
+(define str17
+  "class c1 extends object
+     field protected x
+     method initialize() set x = 37
+   
+   class c2 extends c1
+     method initialize() super initialize()
+     method m1() x
+   let o2 = new c2()
+   in send o2 m1()")
+(check-equal? (:e str17) (num-val 37))
+
+(define str18
+  "class c1 extends object
+     field private x
+     method initialize() set x = 37
+   
+   class c2 extends c1
+     method initialize() super initialize()
+     method m1() x
+   let o2 = new c2()
+   in send o2 m1()")
+; (:e str18) ;should fail
