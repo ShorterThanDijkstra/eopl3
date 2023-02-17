@@ -84,75 +84,74 @@
   (sllgen:make-string-scanner the-lexical-spec the-grammar))
 
 (define-datatype program
-  program?
-  (a-program (a-program48 (list-of class-decl?))
-             (a-program49 expression?)))
+                 program?
+                 (a-program (a-program48 (list-of class-decl?))
+                            (a-program49 expression?)))
 
 (define-datatype
-  class-decl
-  class-decl?
-  (a-class-decl (a-class-decl50 symbol?)
-                (a-class-decl51 symbol?)
-                (a-class-decl52 (list-of symbol?))
-                (a-class-decl53 (list-of method-decl?))))
+ class-decl
+ class-decl?
+ (a-class-decl (a-class-decl50 symbol?)
+               (a-class-decl51 symbol?)
+               (a-class-decl52 (list-of symbol?))
+               (a-class-decl53 (list-of method-decl?))))
 
 (define-datatype method-decl
-  method-decl?
-  (a-method-decl (a-method-decl54 symbol?)
-                 (a-method-decl55 (list-of symbol?))
-                 (a-method-decl56 expression?)))
+                 method-decl?
+                 (a-method-decl (a-method-decl54 symbol?)
+                                (a-method-decl55 (list-of symbol?))
+                                (a-method-decl56 expression?)))
 
 (define-datatype
-  expression
-  expression?
-  (const-exp (const-exp57 number?))
-  (diff-exp (diff-exp58 expression?) (diff-exp59 expression?))
-  (sum-exp (sum-exp60 expression?) (sum-exp61 expression?))
-  (zero?-exp (zero?-exp62 expression?))
-  (if-exp (if-exp63 expression?)
-          (if-exp64 expression?)
-          (if-exp65 expression?))
-  (var-exp (var-exp66 symbol?))
-  (let-exp (let-exp67 (list-of symbol?))
-           (let-exp68 (list-of expression?))
-           (let-exp69 expression?))
-  (proc-exp (proc-exp70 (list-of symbol?)) (proc-exp71 expression?))
-  (null?-exp (null?-exp72 expression?))
-  (car-exp (car-exp73 expression?))
-  (cdr-exp (cdr-exp74 expression?))
-  (cons-exp (cons-exp75 expression?) (cons-exp76 expression?))
-  (call-exp (call-exp77 expression?)
-            (call-exp78 (list-of expression?)))
-  (letrec-exp (letrec-exp79 (list-of symbol?))
-              (letrec-exp80 (list-of (list-of symbol?)))
-              (letrec-exp81 (list-of expression?))
-              (letrec-exp82 expression?))
-  (begin-exp (begin-exp83 expression?)
-             (begin-exp84 (list-of expression?)))
-  (assign-exp (assign-exp85 symbol?) (assign-exp86 expression?))
-  (list-exp (list-exp87 (list-of expression?)))
-  (new-object-exp (new-object-exp88 symbol?)
-                  (new-object-exp89 (list-of expression?)))
-  (self-exp)
-  (nameless-self-exp (self-n number?))
-  (method-call-exp (method-call-exp90 expression?)
-                   (method-call-exp91 symbol?)
-                   (method-call-exp92 (list-of expression?)))
-  (super-call-exp (super-call-exp93 symbol?)
-                  (super-call-exp94 (list-of expression?)))
-  (nameless-super-call-exp (super-call-exp93 symbol?)
-                           (super-call-exp94 (list-of expression?))
-                           (self-n number?)
-                           (super-n number?)
-                           )
-  (nameless-var-exp (nameless-var-exp95 number?))
-  (nameless-assign-exp (nameless-assign-exp96 number?)
-                       (nameless-assign-exp97 expression?))
-  (nameless-let-exp (nameless-let-exp98 (list-of expression?))
-                    (nameless-let-exp99 expression?))
-  (nameless-letrec-exp (nameless-letrec-exp100 (list-of expression?))
-                       (nameless-letrec-exp101 expression?))
-  (nameless-proc-exp (nameless-proc-exp102 expression?)))
+ expression
+ expression?
+ (const-exp (const-exp57 number?))
+ (diff-exp (diff-exp58 expression?) (diff-exp59 expression?))
+ (sum-exp (sum-exp60 expression?) (sum-exp61 expression?))
+ (zero?-exp (zero?-exp62 expression?))
+ (if-exp (if-exp63 expression?)
+         (if-exp64 expression?)
+         (if-exp65 expression?))
+ (var-exp (var-exp66 symbol?))
+ (let-exp (let-exp67 (list-of symbol?))
+          (let-exp68 (list-of expression?))
+          (let-exp69 expression?))
+ (proc-exp (proc-exp70 (list-of symbol?)) (proc-exp71 expression?))
+ (null?-exp (null?-exp72 expression?))
+ (car-exp (car-exp73 expression?))
+ (cdr-exp (cdr-exp74 expression?))
+ (cons-exp (cons-exp75 expression?) (cons-exp76 expression?))
+ (call-exp (call-exp77 expression?)
+           (call-exp78 (list-of expression?)))
+ (letrec-exp (letrec-exp79 (list-of symbol?))
+             (letrec-exp80 (list-of (list-of symbol?)))
+             (letrec-exp81 (list-of expression?))
+             (letrec-exp82 expression?))
+ (begin-exp (begin-exp83 expression?)
+            (begin-exp84 (list-of expression?)))
+ (assign-exp (assign-exp85 symbol?) (assign-exp86 expression?))
+ (list-exp (list-exp87 (list-of expression?)))
+ (new-object-exp (new-object-exp88 symbol?)
+                 (new-object-exp89 (list-of expression?)))
+ (self-exp)
+ (nameless-self-exp (self-n number?))
+ (method-call-exp (method-call-exp90 expression?)
+                  (method-call-exp91 symbol?)
+                  (method-call-exp92 (list-of expression?)))
+ (super-call-exp (super-call-exp93 symbol?)
+                 (super-call-exp94 (list-of expression?)))
+ (nameless-super-call-exp (super-call-exp93 symbol?)
+                          (super-call-exp94 (list-of expression?))
+                          (self-n number?)
+                          (super-n number?))
+ (nameless-var-exp (nameless-var-exp95 number?))
+ (nameless-assign-exp (nameless-assign-exp96 number?)
+                      (nameless-assign-exp97 expression?))
+ (nameless-let-exp (nameless-let-exp98 (list-of expression?))
+                   (nameless-let-exp99 expression?))
+ (nameless-letrec-exp (nameless-letrec-exp100 (list-of expression?))
+                      (nameless-letrec-exp101 expression?))
+ (nameless-proc-exp (nameless-proc-exp102 expression?)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; store
@@ -249,9 +248,9 @@
 (define identifier? symbol?)
 
 (define-datatype object
-  object?
-  (an-object (class-name identifier?)
-             (fields (list-of reference?))))
+                 object?
+                 (an-object (class-name identifier?)
+                            (fields (list-of reference?))))
 
 ;; new-object : ClassName -> Obj
 (define new-object
@@ -264,11 +263,11 @@
 ;;;;;;;;;;;;;;;; methods and method environments ;;;;;;;;;;;;;;;;
 
 (define-datatype method
-  method?
-  (a-method (vars (list-of symbol?))
-            (body expression?)
-            (super-name symbol?)
-            (field-names (list-of symbol?))))
+                 method?
+                 (a-method (vars (list-of symbol?))
+                           (body expression?)
+                           (super-name symbol?)
+                           (field-names (list-of symbol?))))
 
 ;;;;;;;;;;;;;;;; method environments ;;;;;;;;;;;;;;;;
 
@@ -309,32 +308,30 @@
   (lambda (m-decls super-name field-names)
     (map (lambda (m-decl)
            (cases method-decl
-             m-decl
-             (a-method-decl
-              (method-name vars body)
-              (let ([m-senv (extend-senv*
-                             vars
-                             (extend-senv
-                              '%self
-                              (extend-senv '%super
-                                           (extend-senv*
-                                            field-names
-                                            (empty-senv)))))])
-                (list method-name
-                      (a-method vars
-                                (translation-of
-                                 body
-                                 m-senv )
-                                super-name
-                                field-names))))))
+                  m-decl
+                  (a-method-decl
+                   (method-name vars body)
+                   (let ([m-senv (extend-senv*
+                                  vars
+                                  (extend-senv
+                                   '%self
+                                   (extend-senv '%super
+                                                (extend-senv*
+                                                 field-names
+                                                 (empty-senv)))))])
+                     (list method-name
+                           (a-method vars
+                                     (translation-of body m-senv)
+                                     super-name
+                                     field-names))))))
          m-decls)))
 ;;;;;;;;;;;;;;;; classes ;;;;;;;;;;;;;;;;
 
 (define-datatype class
-  class?
-  (a-class (super-name (maybe symbol?))
-           (field-names (list-of symbol?))
-           (method-env method-environment?)))
+                 class?
+                 (a-class (super-name (maybe symbol?))
+                          (field-names (list-of symbol?))
+                          (method-env method-environment?)))
 
 ;;;;;;;;;;;;;;;; class environments ;;;;;;;;;;;;;;;;
 
@@ -370,21 +367,21 @@
 (define initialize-class-decl!
   (lambda (c-decl)
     (cases class-decl
-      c-decl
-      (a-class-decl
-       (c-name s-name f-names m-decls)
-       (let ([f-names (append-field-names
-                       (class->field-names (lookup-class s-name))
-                       f-names)])
-         (add-to-class-env!
-          c-name
-          (a-class s-name
-                   f-names
-                   (merge-method-envs
-                    (class->method-env (lookup-class s-name))
-                    (method-decls->method-env m-decls
-                                              s-name
-                                              f-names)))))))))
+           c-decl
+           (a-class-decl
+            (c-name s-name f-names m-decls)
+            (let ([f-names (append-field-names
+                            (class->field-names (lookup-class s-name))
+                            f-names)])
+              (add-to-class-env!
+               c-name
+               (a-class s-name
+                        f-names
+                        (merge-method-envs
+                         (class->method-env (lookup-class s-name))
+                         (method-decls->method-env m-decls
+                                                   s-name
+                                                   f-names)))))))))
 
 ;; exercise:  rewrite this so there's only one set! to the-class-env.
 
@@ -407,21 +404,21 @@
 (define class->super-name
   (lambda (c-struct)
     (cases class
-      c-struct
-      (a-class (super-name field-names method-env) super-name))))
+           c-struct
+           (a-class (super-name field-names method-env) super-name))))
 
 (define class->field-names
   (lambda (c-struct)
     (cases class
-      c-struct
-      (a-class (super-name field-names method-env)
-               field-names))))
+           c-struct
+           (a-class (super-name field-names method-env)
+                    field-names))))
 
 (define class->method-env
   (lambda (c-struct)
     (cases class
-      c-struct
-      (a-class (super-name field-names method-env) method-env))))
+           c-struct
+           (a-class (super-name field-names method-env) method-env))))
 
 (define object->class-name
   (lambda (obj)
@@ -450,36 +447,36 @@
 ;;; reference.
 
 (define-datatype expval
-  expval?
-  (num-val (value number?))
-  (bool-val (boolean boolean?))
-  (proc-val (proc proc?))
-  ;  (ref-val (ref reference?)) ;why this
-  (obj-val (obj object?))
-  (list-val (lst (list-of expval?))))
+                 expval?
+                 (num-val (value number?))
+                 (bool-val (boolean boolean?))
+                 (proc-val (proc proc?))
+                 ;  (ref-val (ref reference?)) ;why this
+                 (obj-val (obj object?))
+                 (list-val (lst (list-of expval?))))
 
 ;;; extractors:
 
 (define expval->num
   (lambda (v)
     (cases expval
-      v
-      (num-val (num) num)
-      (else (expval-extractor-error 'num v)))))
+           v
+           (num-val (num) num)
+           (else (expval-extractor-error 'num v)))))
 
 (define expval->bool
   (lambda (v)
     (cases expval
-      v
-      (bool-val (bool) bool)
-      (else (expval-extractor-error 'bool v)))))
+           v
+           (bool-val (bool) bool)
+           (else (expval-extractor-error 'bool v)))))
 
 (define expval->proc
   (lambda (v)
     (cases expval
-      v
-      (proc-val (proc) proc)
-      (else (expval-extractor-error 'proc v)))))
+           v
+           (proc-val (proc) proc)
+           (else (expval-extractor-error 'proc v)))))
 
 ;; not used.  Nor is expval->obj or expval->list, so we haven't
 ;; written them.
@@ -500,57 +497,51 @@
 ;;;;;;;;;;;;;;;; procedures ;;;;;;;;;;;;;;;;
 
 (define-datatype proc
-  proc?
-  (procedure  (body expression?)
-              (env nameless-environment?)))
+                 proc?
+                 (procedure (body expression?)
+                            (env nameless-environment?)))
 
 (define-datatype
-  environment
-  environment?
-  (empty-env)
-  (extend-env (bvars (list-of symbol?))
-              (bvals (list-of reference?))
-              (saved-env environment?))
-  (extend-env-rec** (proc-names (list-of symbol?))
-                    (b-varss (list-of (list-of symbol?)))
-                    (proc-bodies (list-of expression?))
-                    (saved-env environment?))
-  (extend-env-with-self-and-super (self object?)
-                                  (super-name symbol?)
-                                  (saved-env environment?)))
+ environment
+ environment?
+ (empty-env)
+ (extend-env (bvars (list-of symbol?))
+             (bvals (list-of reference?))
+             (saved-env environment?))
+ (extend-env-rec** (proc-names (list-of symbol?))
+                   (b-varss (list-of (list-of symbol?)))
+                   (proc-bodies (list-of expression?))
+                   (saved-env environment?))
+ (extend-env-with-self-and-super (self object?)
+                                 (super-name symbol?)
+                                 (saved-env environment?)))
 
 (define nameless-environment?
-  (list-of  (lambda (v)
-              (or (reference? v)
-                  (symbol? v)
-                  (object? v)))))
+  (list-of (lambda (v) (or (reference? v) (symbol? v) (object? v)))))
 
-(define empty-nameless-env
-  (lambda ()
-    '()))
-
+(define empty-nameless-env (lambda () '()))
 
 (define extend-nameless-env
-  (lambda (val nameless-env)
-    (cons val nameless-env)))
+  (lambda (val nameless-env) (cons val nameless-env)))
 
 (define extend-nameless-env*
   (lambda (vals nameless-env)
     (if (null? vals)
         nameless-env
-        (extend-nameless-env (car vals)
-                             (extend-nameless-env* (cdr vals)
-                                                   nameless-env)))))
+        (extend-nameless-env
+         (car vals)
+         (extend-nameless-env* (cdr vals) nameless-env)))))
 (define extend-nameless-rec-env*
   (lambda (exps env)
     (let ([refs (map (lambda (ignore) (newref 'unintialize)) exps)])
       (let ([proc-env (extend-nameless-env* refs env)])
-        (let loop ([refs refs]
-                   [exps exps])
+        (let loop ([refs refs] [exps exps])
           (if (null? refs)
               proc-env
-              (begin (setref! (car refs) (proc-val (procedure (car exps) proc-env)))
-                     (loop (cdr refs) (cdr exps)))))))))
+              (begin
+                (setref! (car refs)
+                         (proc-val (procedure (car exps) proc-env)))
+                (loop (cdr refs) (cdr exps)))))))))
 
 (define list-set
   (lambda (lst n val)
@@ -560,25 +551,24 @@
       [else (cons (car lst) (list-set (cdr lst) (- n 1) val))])))
 
 (define apply-nameless-env
-  (lambda (nameless-env n)
-    (list-ref nameless-env n)))
+  (lambda (nameless-env n) (list-ref nameless-env n)))
 
 ;; env->list : Env -> List
 ;; used for pretty-printing and debugging
 (define env->list
   (lambda (env)
     (cases environment
-      env
-      (empty-env () '())
-      (extend-env (sym val saved-env)
-                  (cons (list sym val) (env->list saved-env)))
-      (extend-env-rec** (p-names b-varss p-bodies saved-env)
-                        (cons (list 'letrec p-names '...)
-                              (env->list saved-env)))
-      (extend-env-with-self-and-super
-       (self super-name saved-env)
-       (cons (list 'self self 'super super-name)
-             (env->list saved-env))))))
+           env
+           (empty-env () '())
+           (extend-env (sym val saved-env)
+                       (cons (list sym val) (env->list saved-env)))
+           (extend-env-rec** (p-names b-varss p-bodies saved-env)
+                             (cons (list 'letrec p-names '...)
+                                   (env->list saved-env)))
+           (extend-env-with-self-and-super
+            (self super-name saved-env)
+            (cons (list 'self self 'super super-name)
+                  (env->list saved-env))))))
 
 ;; expval->printable : ExpVal -> List
 ;; returns a value like its argument, except procedures get cleaned
@@ -586,16 +576,15 @@
 (define expval->printable
   (lambda (val)
     (cases
-        expval
-      val
-      (proc-val
-       (p)
-       (cases proc
-         p
-         (procedure
-          ( body saved-env)
-          (list 'procedure  '... (env->list saved-env)))))
-      (else val))))
+     expval
+     val
+     (proc-val (p)
+               (cases proc
+                      p
+                      (procedure
+                       (body saved-env)
+                       (list 'procedure '... (env->list saved-env)))))
+     (else val))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; environment
@@ -622,32 +611,32 @@
 (define apply-env
   (lambda (env search-sym)
     (cases environment
-      env
-      (empty-env
-       ()
-       (eopl:error 'apply-env "No binding for ~s" search-sym))
-      (extend-env (bvars bvals saved-env)
-                  (cond
-                    [(location search-sym bvars)
-                     =>
-                     (lambda (n) (list-ref bvals n))]
-                    [else (apply-env saved-env search-sym)]))
-      (extend-env-rec**
-       (p-names b-varss p-bodies saved-env)
-       (cond
-         [(location search-sym p-names)
-          =>
-          (lambda (n)
-            (newref (proc-val (procedure (list-ref b-varss n)
-                                         (list-ref p-bodies n)
-                                         env))))]
-         [else (apply-env saved-env search-sym)]))
-      (extend-env-with-self-and-super
-       (self super-name saved-env)
-       (case search-sym
-         [(%self) self]
-         [(%super) super-name]
-         [else (apply-env saved-env search-sym)])))))
+           env
+           (empty-env
+            ()
+            (eopl:error 'apply-env "No binding for ~s" search-sym))
+           (extend-env (bvars bvals saved-env)
+                       (cond
+                         [(location search-sym bvars)
+                          =>
+                          (lambda (n) (list-ref bvals n))]
+                         [else (apply-env saved-env search-sym)]))
+           (extend-env-rec**
+            (p-names b-varss p-bodies saved-env)
+            (cond
+              [(location search-sym p-names)
+               =>
+               (lambda (n)
+                 (newref (proc-val (procedure (list-ref b-varss n)
+                                              (list-ref p-bodies n)
+                                              env))))]
+              [else (apply-env saved-env search-sym)]))
+           (extend-env-with-self-and-super
+            (self super-name saved-env)
+            (case search-sym
+              [(%self) self]
+              [(%super) super-name]
+              [else (apply-env saved-env search-sym)])))))
 
 ;; location : Sym * Listof(Sym) -> Maybe(Int)
 ;; (location sym syms) returns the location of sym in syms or #f is
@@ -693,90 +682,89 @@
 (define translation-of
   (lambda (exp senv)
     (cases
-        expression
-      exp
-      (const-exp (num) (const-exp num))
-
-      (diff-exp (exp1 exp2)
-                (diff-exp (translation-of exp1 senv)
-                          (translation-of exp2 senv)))
-      (sum-exp (exp1 exp2)
-               (sum-exp (translation-of exp1 senv)
-                        (translation-of exp2 senv)))
-      (zero?-exp (exp1) (zero?-exp (translation-of exp1 senv)))
-      (if-exp (exp1 exp2 exp3)
-              (if-exp (translation-of exp1 senv)
-                      (translation-of exp2 senv)
-                      (translation-of exp3 senv)))
-
-      (call-exp (rator rands)
-                (call-exp (translation-of rator senv)
-                          (map (lambda (rand)
-                                 (translation-of rand senv))
-                               rands)))
-      (begin-exp (exp1 exps)
-                 (begin-exp (translation-of exp1 senv)
-                            (map (lambda (exp2)
-                                   (translation-of exp2 senv))
-                                 exps)))
-      (list-exp (exps)
-                (list-exp (map (lambda (exp1)
-                                 (translation-of exp1 senv))
-                               exps)))
-      (null?-exp (exp1) (null?-exp (translation-of exp1 senv)))
-      (car-exp (exp1) (car-exp (translation-of exp1 senv)))
-      (cdr-exp (exp1) (cdr-exp (translation-of exp1 senv)))
-      (cons-exp (arg1 arg2)
-                (cons-exp (translation-of arg1 senv)
-                          (translation-of arg2 senv)))
-      ;; new cases for CLASSES language
+     expression
+     exp
+     (const-exp (num) (const-exp num))
+     (diff-exp (exp1 exp2)
+               (diff-exp (translation-of exp1 senv)
+                         (translation-of exp2 senv)))
+     (sum-exp (exp1 exp2)
+              (sum-exp (translation-of exp1 senv)
+                       (translation-of exp2 senv)))
+     (zero?-exp (exp1) (zero?-exp (translation-of exp1 senv)))
+     (if-exp (exp1 exp2 exp3)
+             (if-exp (translation-of exp1 senv)
+                     (translation-of exp2 senv)
+                     (translation-of exp3 senv)))
+     (call-exp (rator rands)
+               (call-exp (translation-of rator senv)
+                         (map (lambda (rand)
+                                (translation-of rand senv))
+                              rands)))
+     (begin-exp (exp1 exps)
+                (begin-exp (translation-of exp1 senv)
+                           (map (lambda (exp2)
+                                  (translation-of exp2 senv))
+                                exps)))
+     (list-exp (exps)
+               (list-exp (map (lambda (exp1)
+                                (translation-of exp1 senv))
+                              exps)))
+     (null?-exp (exp1) (null?-exp (translation-of exp1 senv)))
+     (car-exp (exp1) (car-exp (translation-of exp1 senv)))
+     (cdr-exp (exp1) (cdr-exp (translation-of exp1 senv)))
+     (cons-exp (arg1 arg2)
+               (cons-exp (translation-of arg1 senv)
+                         (translation-of arg2 senv)))
+     ;; new cases for CLASSES language
+     (new-object-exp
+      (class-name rands)
       (new-object-exp
-       (class-name rands)
-       (new-object-exp
-        class-name
-        (map (lambda (rand) (translation-of rand senv)) rands)))
-      (self-exp () (nameless-self-exp (apply-senv senv '%self)))
+       class-name
+       (map (lambda (rand) (translation-of rand senv)) rands)))
+     (self-exp () (nameless-self-exp (apply-senv senv '%self)))
+     (method-call-exp
+      (obj-exp method-name rands)
       (method-call-exp
-       (obj-exp method-name rands)
-       (method-call-exp
-        (translation-of obj-exp senv)
-        method-name
-        (map (lambda (rand) (translation-of rand senv)) rands)))
-      (super-call-exp
-       (method-name rands)
-       (nameless-super-call-exp
-        method-name
-        (map (lambda (rand) (translation-of rand senv)) rands)
-        (apply-senv senv '%self)
-        (apply-senv senv '%super)
-        ))
-      (var-exp (var) (nameless-var-exp (apply-senv senv var)))
-      (let-exp (vars exps body)
-               (nameless-let-exp
-                (map (lambda (exp1) (translation-of exp1 senv)) exps)
-                (translation-of body (extend-senv* vars senv))))
-      (proc-exp (bvars body)
-                (nameless-proc-exp
-                 (translation-of body (extend-senv* bvars senv))))
-      (letrec-exp (p-names b-varss p-bodies letrec-body)
-                  (let ([senv-for-body (extend-senv* p-names senv)])
-                    (nameless-letrec-exp
-                     (map (lambda (p-body b-vars)
-                            (translation-of
-                             p-body
-                             (extend-senv* b-vars senv-for-body)))
-                          p-bodies
-                          b-varss)
-                     (translation-of letrec-body senv-for-body))))
-      (assign-exp (var exp1)
-                  (nameless-assign-exp  (apply-senv senv var) (translation-of exp1 senv)))
-      (nameless-self-exp (n) (eopl:error 'translation-of))
-      (nameless-super-call-exp (method-name rands self-n super-n) (eopl:error 'translation-of))
-      (nameless-var-exp (n) (eopl:error 'translation-of))
-      (nameless-assign-exp (n exp1) (eopl:error 'translation-of))
-      (nameless-let-exp (exps body) (eopl:error 'translation-of))
-      (nameless-letrec-exp (exps body) (eopl:error 'translation-of))
-      (nameless-proc-exp (body) (eopl:error 'translation-of)))))
+       (translation-of obj-exp senv)
+       method-name
+       (map (lambda (rand) (translation-of rand senv)) rands)))
+     (super-call-exp
+      (method-name rands)
+      (nameless-super-call-exp
+       method-name
+       (map (lambda (rand) (translation-of rand senv)) rands)
+       (apply-senv senv '%self)
+       (apply-senv senv '%super)))
+     (var-exp (var) (nameless-var-exp (apply-senv senv var)))
+     (let-exp (vars exps body)
+              (nameless-let-exp
+               (map (lambda (exp1) (translation-of exp1 senv)) exps)
+               (translation-of body (extend-senv* vars senv))))
+     (proc-exp (bvars body)
+               (nameless-proc-exp
+                (translation-of body (extend-senv* bvars senv))))
+     (letrec-exp (p-names b-varss p-bodies letrec-body)
+                 (let ([senv-for-body (extend-senv* p-names senv)])
+                   (nameless-letrec-exp
+                    (map (lambda (p-body b-vars)
+                           (translation-of
+                            p-body
+                            (extend-senv* b-vars senv-for-body)))
+                         p-bodies
+                         b-varss)
+                    (translation-of letrec-body senv-for-body))))
+     (assign-exp (var exp1)
+                 (nameless-assign-exp (apply-senv senv var)
+                                      (translation-of exp1 senv)))
+     (nameless-self-exp (n) (eopl:error 'translation-of))
+     (nameless-super-call-exp (method-name rands self-n super-n)
+                              (eopl:error 'translation-of))
+     (nameless-var-exp (n) (eopl:error 'translation-of))
+     (nameless-assign-exp (n exp1) (eopl:error 'translation-of))
+     (nameless-let-exp (exps body) (eopl:error 'translation-of))
+     (nameless-letrec-exp (exps body) (eopl:error 'translation-of))
+     (nameless-proc-exp (body) (eopl:error 'translation-of)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; interp
@@ -799,181 +787,176 @@
 
 (define init-nameless-env
   (lambda ()
-    (let ([env (extend-nameless-env
-                (newref (bool-val #f))
-                (empty-nameless-env))])
-      (extend-nameless-env
-       (newref (bool-val #t)) env))))
+    (let ([env (extend-nameless-env (newref (bool-val #f))
+                                    (empty-nameless-env))])
+      (extend-nameless-env (newref (bool-val #t)) env))))
 
 ;; value-of-program : Program -> ExpVal
 (define value-of-program
   (lambda (pgm)
     (initialize-store!)
     (cases program
-      pgm
-      (a-program (class-decls body)
-                 (initialize-class-env! class-decls)
-                 (value-of (translation-of body (init-senv))
-                           (init-nameless-env))))))
+           pgm
+           (a-program (class-decls body)
+                      (initialize-class-env! class-decls)
+                      (value-of (translation-of body (init-senv))
+                                (init-nameless-env))))))
 
 ; value-of : Exp * Env -> ExpVal
 (define value-of
   (lambda (exp env)
     (cases
-        expression
-      exp
-      (const-exp (num) (num-val num))
-      (diff-exp (exp1 exp2)
-                (let ([val1 (expval->num (value-of exp1 env))]
-                      [val2 (expval->num (value-of exp2 env))])
-                  (num-val (- val1 val2))))
-      (sum-exp (exp1 exp2)
+     expression
+     exp
+     (const-exp (num) (num-val num))
+     (diff-exp (exp1 exp2)
                (let ([val1 (expval->num (value-of exp1 env))]
                      [val2 (expval->num (value-of exp2 env))])
-                 (num-val (+ val1 val2))))
-      (zero?-exp (exp1)
-                 (let ([val1 (expval->num (value-of exp1 env))])
-                   (if (zero? val1) (bool-val #t) (bool-val #f))))
-      (if-exp (exp0 exp1 exp2)
-              (if (expval->bool (value-of exp0 env))
-                  (value-of exp1 env)
-                  (value-of exp2 env)))
-
-      (call-exp (rator rands)
-                (let ([proc (expval->proc (value-of rator env))]
-                      [args (values-of-exps rands env)])
-                  (apply-procedure proc args)))
-
-      (begin-exp
-        (exp1 exps)
-        (letrec ([value-of-begins
-                  (lambda (e1 es)
-                    (let ([v1 (value-of e1 env)])
-                      (if (null? es)
-                          v1
-                          (value-of-begins (car es) (cdr es)))))])
-          (value-of-begins exp1 exps)))
-
-      (list-exp (exps) (list-val (values-of-exps exps env)))
-      (null?-exp (exp)
-                 (let ([val (value-of exp env)])
-                   (cases expval
-                     val
-                     (list-val (vals)
-                               (if (null? vals)
-                                   (bool-val #t)
-                                   (bool-val #f)))
-                     (else (eopl:error 'value-of exp)))))
-      (car-exp (exp)
-               (let ([val (value-of exp env)])
-                 (cases expval
-                   val
-                   (list-val (vals)
-                             (if (null? vals)
-                                 (eopl:error 'value-of exp)
-                                 (car vals)))
-                   (else (eopl:error 'value-of exp)))))
-      (cdr-exp (exp)
-               (let ([val (value-of exp env)])
-                 (cases expval
-                   val
-                   (list-val (vals)
-                             (if (null? vals)
-                                 (eopl:error 'value-of exp)
-                                 (list-val (cdr vals))))
-                   (else (eopl:error 'value-of exp)))))
-      (cons-exp
-       (arg1 arg2)
-       (let ([val1 (value-of arg1 env)] [val2 (value-of arg2 env)])
-         (cases expval
-           val2
-           (list-val (vals) (list-val (cons val1 vals)))
-           (else (eopl:error 'value-of exp)))))
-      ;; new cases for CLASSES language
-      (new-object-exp
-       (class-name rands)
-       (let ([args (values-of-exps rands env)]
-             [obj (new-object class-name)])
-         (apply-method (find-method class-name 'initialize) obj args)
-         obj))
-      ;-------------------------------------------------------------------
-      (nameless-self-exp (n) (apply-nameless-env env n))
-      (method-call-exp
-       (obj-exp method-name rands)
-       (let ([args (values-of-exps rands env)]
-             [obj (value-of obj-exp env)])
-         (apply-method
-          (find-method (object->class-name obj) method-name)
-          obj
-          args)))
-      (nameless-super-call-exp
-       (method-name rands self-n super-n)
-       (let ([args (values-of-exps rands env)]
-             [obj  (apply-nameless-env env self-n)])
-         (apply-method
-          (find-method  (apply-nameless-env env super-n) method-name)
-          obj
-          args)))
-      ;-------------------------------------------------------------------
-      (nameless-var-exp (n)  (deref (apply-nameless-env env n)))
-      (nameless-assign-exp (var e)
-                           (begin
-                             (setref! (apply-nameless-env env var) (value-of e env))
-                             (num-val 27)))
-      (nameless-let-exp (exps body)
-                        (let ([vals (map (lambda (exp1) (value-of exp1 env)) exps)])
-                          (value-of body
-                                    (extend-nameless-env* (map newref vals) env))))
-      (nameless-letrec-exp (exps body)
-                           (let ([new-env
-                                  (extend-nameless-rec-env* exps env)])
-                             (value-of body new-env)))
-      (nameless-proc-exp (body)
-                         (proc-val
-                          (procedure body env)))
-      (super-call-exp (method-name rands) (eopl:error 'value-of))
-      (self-exp () (eopl:error 'value-of))
-      (var-exp (var) (eopl:error 'value-of))
-      (assign-exp (x e) (eopl:error 'value-of))
-      (let-exp (vars exps body) (eopl:error 'value-of))
-      (proc-exp (bvars body) (eopl:error 'value-of))
-      (letrec-exp (p-names b-varss p-bodies letrec-body) (eopl:error 'value-of))
-      )))
+                 (num-val (- val1 val2))))
+     (sum-exp (exp1 exp2)
+              (let ([val1 (expval->num (value-of exp1 env))]
+                    [val2 (expval->num (value-of exp2 env))])
+                (num-val (+ val1 val2))))
+     (zero?-exp (exp1)
+                (let ([val1 (expval->num (value-of exp1 env))])
+                  (if (zero? val1) (bool-val #t) (bool-val #f))))
+     (if-exp (exp0 exp1 exp2)
+             (if (expval->bool (value-of exp0 env))
+                 (value-of exp1 env)
+                 (value-of exp2 env)))
+     (call-exp (rator rands)
+               (let ([proc (expval->proc (value-of rator env))]
+                     [args (values-of-exps rands env)])
+                 (apply-procedure proc args)))
+     (begin-exp
+      (exp1 exps)
+      (letrec ([value-of-begins
+                (lambda (e1 es)
+                  (let ([v1 (value-of e1 env)])
+                    (if (null? es)
+                        v1
+                        (value-of-begins (car es) (cdr es)))))])
+        (value-of-begins exp1 exps)))
+     (list-exp (exps) (list-val (values-of-exps exps env)))
+     (null?-exp (exp)
+                (let ([val (value-of exp env)])
+                  (cases expval
+                         val
+                         (list-val (vals)
+                                   (if (null? vals)
+                                       (bool-val #t)
+                                       (bool-val #f)))
+                         (else (eopl:error 'value-of exp)))))
+     (car-exp (exp)
+              (let ([val (value-of exp env)])
+                (cases expval
+                       val
+                       (list-val (vals)
+                                 (if (null? vals)
+                                     (eopl:error 'value-of exp)
+                                     (car vals)))
+                       (else (eopl:error 'value-of exp)))))
+     (cdr-exp (exp)
+              (let ([val (value-of exp env)])
+                (cases expval
+                       val
+                       (list-val (vals)
+                                 (if (null? vals)
+                                     (eopl:error 'value-of exp)
+                                     (list-val (cdr vals))))
+                       (else (eopl:error 'value-of exp)))))
+     (cons-exp
+      (arg1 arg2)
+      (let ([val1 (value-of arg1 env)] [val2 (value-of arg2 env)])
+        (cases expval
+               val2
+               (list-val (vals) (list-val (cons val1 vals)))
+               (else (eopl:error 'value-of exp)))))
+     ;; new cases for CLASSES language
+     (new-object-exp
+      (class-name rands)
+      (let ([args (values-of-exps rands env)]
+            [obj (new-object class-name)])
+        (apply-method (find-method class-name 'initialize) obj args)
+        obj))
+     ;-------------------------------------------------------------------
+     (nameless-self-exp (n) (apply-nameless-env env n))
+     (method-call-exp
+      (obj-exp method-name rands)
+      (let ([args (values-of-exps rands env)]
+            [obj (value-of obj-exp env)])
+        (apply-method
+         (find-method (object->class-name obj) method-name)
+         obj
+         args)))
+     (nameless-super-call-exp
+      (method-name rands self-n super-n)
+      (let ([args (values-of-exps rands env)]
+            [obj (apply-nameless-env env self-n)])
+        (apply-method
+         (find-method (apply-nameless-env env super-n) method-name)
+         obj
+         args)))
+     ;-------------------------------------------------------------------
+     (nameless-var-exp (n) (deref (apply-nameless-env env n)))
+     (nameless-assign-exp
+      (var e)
+      (begin
+        (setref! (apply-nameless-env env var) (value-of e env))
+        (num-val 27)))
+     (nameless-let-exp
+      (exps body)
+      (let ([vals (map (lambda (exp1) (value-of exp1 env)) exps)])
+        (value-of body (extend-nameless-env* (map newref vals) env))))
+     (nameless-letrec-exp
+      (exps body)
+      (let ([new-env (extend-nameless-rec-env* exps env)])
+        (value-of body new-env)))
+     (nameless-proc-exp (body) (proc-val (procedure body env)))
+     (super-call-exp (method-name rands) (eopl:error 'value-of))
+     (self-exp () (eopl:error 'value-of))
+     (var-exp (var) (eopl:error 'value-of))
+     (assign-exp (x e) (eopl:error 'value-of))
+     (let-exp (vars exps body) (eopl:error 'value-of))
+     (proc-exp (bvars body) (eopl:error 'value-of))
+     (letrec-exp (p-names b-varss p-bodies letrec-body)
+                 (eopl:error 'value-of)))))
 
 ;; apply-procedure : Proc * Listof(ExpVal) -> ExpVal
 (define apply-procedure
   (lambda (proc1 vals)
-    (cases proc proc1
-
-      (procedure (body saved-nameless-env)
-                 (let ([new-env (extend-nameless-env* (map newref vals) saved-nameless-env)])
-                   ;  (eopl:pretty-print new-env)
-                   ;  (eopl:pretty-print the-store)
-                   ;  (eopl:pretty-print body)
-                   ;  (display "------------------------\n")
-                   (value-of body new-env))))))
-
+    (cases proc
+           proc1
+           (procedure
+            (body saved-nameless-env)
+            (let ([new-env (extend-nameless-env* (map newref vals)
+                                                 saved-nameless-env)])
+              ;  (eopl:pretty-print new-env)
+              ;  (eopl:pretty-print the-store)
+              ;  (eopl:pretty-print body)
+              ;  (display "------------------------\n")
+              (value-of body new-env))))))
 
 ;; apply-method : Method * Obj * Listof(ExpVal) -> ExpVal
 (define apply-method
   (lambda (m self args)
     (cases method
-      m
-      (a-method
-       (vars body super-name field-names)
-       ;  (eopl:pretty-print field-names)
-       ;  (eopl:pretty-print (map deref (object->fields self)))
-       ;  (display "-----------------------------\n")
-       (value-of body
-                 (extend-nameless-env*
-                  (map newref args)
-                  (extend-nameless-env
-                   self
-                   (extend-nameless-env
-                    super-name
-                    (extend-nameless-env*
-                     (object->fields self)
-                     (empty-nameless-env))))))))))
+           m
+           (a-method
+            (vars body super-name field-names)
+            ;  (eopl:pretty-print field-names)
+            ;  (eopl:pretty-print (map deref (object->fields self)))
+            ;  (display "-----------------------------\n")
+            (value-of body
+                      (extend-nameless-env*
+                       (map newref args)
+                       (extend-nameless-env
+                        self
+                        (extend-nameless-env
+                         super-name
+                         (extend-nameless-env*
+                          (object->fields self)
+                          (empty-nameless-env))))))))))
 
 (define values-of-exps
   (lambda (exps env) (map (lambda (exp) (value-of exp env)) exps)))
@@ -1257,7 +1240,8 @@ when apply-method m2, field-names is '(x), (object->fields self) is '(37 3)
          odd(x) = if zero?(x) then false else (even -(x, 1))
   in list((even 6), (odd 8))
    ")
-(check-equal? (:e str12) (list-val (list (bool-val #t) (bool-val #f))))
+(check-equal? (:e str12)
+              (list-val (list (bool-val #t) (bool-val #f))))
 
 (define str13
   "class c1 extends object
