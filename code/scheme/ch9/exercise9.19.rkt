@@ -134,11 +134,17 @@
   (new-object-exp (new-object-exp88 symbol?)
                   (new-object-exp89 (list-of expression?)))
   (self-exp)
+  (nameless-self-exp (self-n number?))
   (method-call-exp (method-call-exp90 expression?)
                    (method-call-exp91 symbol?)
                    (method-call-exp92 (list-of expression?)))
   (super-call-exp (super-call-exp93 symbol?)
                   (super-call-exp94 (list-of expression?)))
+  (nameless-super-call-exp (super-call-exp93 symbol?)
+                           (super-call-exp94 (list-of expression?))
+                           (self-n number?)
+                           (super-n number?)
+                           )
   (nameless-var-exp (nameless-var-exp95 number?))
   (nameless-assign-exp (nameless-assign-exp96 number?)
                        (nameless-assign-exp97 expression?))
@@ -175,7 +181,7 @@
 ;; reference? : SchemeVal -> Bool
 (define reference? (lambda (v) (integer? v)))
 
-;; newref : ExpVal -> Ref
+;; newref : Either(ExpVal, Object, Symbol) -> Ref
 (define newref
   (lambda (val)
     (let ([next-ref (length the-store)])
@@ -306,20 +312,21 @@
              m-decl
              (a-method-decl
               (method-name vars body)
-              (list method-name
-                    (a-method vars
-                              (translation-of
-                               body
-                               (extend-senv*
-                                vars
-                                (extend-senv
-                                 'self
-                                 (extend-senv 'super
-                                              (extend-senv*
-                                               field-names
-                                               (empty-senv))))))
-                              super-name
-                              field-names)))))
+              (let ([m-senv (extend-senv*
+                             vars
+                             (extend-senv
+                              '%self
+                              (extend-senv '%super
+                                           (extend-senv*
+                                            field-names
+                                            (empty-senv)))))])
+                (list method-name
+                      (a-method vars
+                                (translation-of
+                                 body
+                                 m-senv )
+                                super-name
+                                field-names))))))
          m-decls)))
 ;;;;;;;;;;;;;;;; classes ;;;;;;;;;;;;;;;;
 
@@ -513,7 +520,10 @@
                                   (saved-env environment?)))
 
 (define nameless-environment?
-  (list-of  (lambda (v) (or (reference? v) (expression? v)))))
+  (list-of  (lambda (v)
+              (or (reference? v)
+                  (symbol? v)
+                  (object? v)))))
 
 (define empty-nameless-env
   (lambda ()
@@ -531,7 +541,16 @@
         (extend-nameless-env (car vals)
                              (extend-nameless-env* (cdr vals)
                                                    nameless-env)))))
-(define extend-nameless-rec-env* extend-nameless-env*)
+(define extend-nameless-rec-env*
+  (lambda (exps env)
+    (let ([refs (map (lambda (ignore) (newref 'unintialize)) exps)])
+      (let ([proc-env (extend-nameless-env* refs env)])
+        (let loop ([refs refs]
+                   [exps exps])
+          (if (null? refs)
+              proc-env
+              (begin (setref! (car refs) (proc-val (procedure (car exps) proc-env)))
+                     (loop (cdr refs) (cdr exps)))))))))
 
 (define list-set
   (lambda (lst n val)
@@ -542,15 +561,7 @@
 
 (define apply-nameless-env
   (lambda (nameless-env n)
-    (let ([x (list-ref nameless-env n)])
-      (cond [(reference? x)
-             x]
-            [(expression? x) ;letrec
-             (let ([ref (newref 'unintialize)])
-               (let ([proc-env (list-set nameless-env n ref)])
-                 (setref! ref (proc-val (procedure x proc-env)))
-                 ref))]
-            [eopl:error 'apply-nameless-env]))))
+    (list-ref nameless-env n)))
 
 ;; env->list : Env -> List
 ;; used for pretty-printing and debugging
@@ -669,8 +680,10 @@
 
 (define apply-senv
   (lambda (senv var)
+    ; (eopl:pretty-print senv)
+    ; (newline)
     (cond
-      [(null? senv) (eopl:error 'report-unbound-var)]
+      [(null? senv) (eopl:error 'report-unbound-var "~s" var)]
       [(eqv? var (car senv)) 0]
       [else (+ 1 (apply-senv (cdr senv) var))])))
 
@@ -683,9 +696,7 @@
         expression
       exp
       (const-exp (num) (const-exp num))
-      (var-exp (var) (nameless-var-exp (apply-senv senv var)))
-      (assign-exp (var exp1)
-                  (nameless-assign-exp  (apply-senv senv var) (translation-of exp1 senv)))
+
       (diff-exp (exp1 exp2)
                 (diff-exp (translation-of exp1 senv)
                           (translation-of exp2 senv)))
@@ -697,28 +708,12 @@
               (if-exp (translation-of exp1 senv)
                       (translation-of exp2 senv)
                       (translation-of exp3 senv)))
-      (let-exp (vars exps body)
-               (nameless-let-exp
-                (map (lambda (exp1) (translation-of exp1 senv)) exps)
-                (translation-of body (extend-senv* vars senv))))
-      (proc-exp (bvars body)
-                (nameless-proc-exp
-                 (translation-of body (extend-senv* bvars senv))))
+
       (call-exp (rator rands)
                 (call-exp (translation-of rator senv)
                           (map (lambda (rand)
                                  (translation-of rand senv))
                                rands)))
-      (letrec-exp (p-names b-varss p-bodies letrec-body)
-                  (let ([senv-for-body (extend-senv* p-names senv)])
-                    (nameless-letrec-exp
-                     (map (lambda (p-body b-vars)
-                            (translation-of
-                             p-body
-                             (extend-senv* b-vars senv-for-body)))
-                          p-bodies
-                          b-varss)
-                     (translation-of letrec-body senv-for-body))))
       (begin-exp (exp1 exps)
                  (begin-exp (translation-of exp1 senv)
                             (map (lambda (exp2)
@@ -740,7 +735,7 @@
        (new-object-exp
         class-name
         (map (lambda (rand) (translation-of rand senv)) rands)))
-      (self-exp () (apply-senv 'self senv))
+      (self-exp () (nameless-self-exp (apply-senv senv '%self)))
       (method-call-exp
        (obj-exp method-name rands)
        (method-call-exp
@@ -749,9 +744,34 @@
         (map (lambda (rand) (translation-of rand senv)) rands)))
       (super-call-exp
        (method-name rands)
-       (super-call-exp
+       (nameless-super-call-exp
         method-name
-        (map (lambda (rand) (translation-of rand senv)) rands)))
+        (map (lambda (rand) (translation-of rand senv)) rands)
+        (apply-senv senv '%self)
+        (apply-senv senv '%super)
+        ))
+      (var-exp (var) (nameless-var-exp (apply-senv senv var)))
+      (let-exp (vars exps body)
+               (nameless-let-exp
+                (map (lambda (exp1) (translation-of exp1 senv)) exps)
+                (translation-of body (extend-senv* vars senv))))
+      (proc-exp (bvars body)
+                (nameless-proc-exp
+                 (translation-of body (extend-senv* bvars senv))))
+      (letrec-exp (p-names b-varss p-bodies letrec-body)
+                  (let ([senv-for-body (extend-senv* p-names senv)])
+                    (nameless-letrec-exp
+                     (map (lambda (p-body b-vars)
+                            (translation-of
+                             p-body
+                             (extend-senv* b-vars senv-for-body)))
+                          p-bodies
+                          b-varss)
+                     (translation-of letrec-body senv-for-body))))
+      (assign-exp (var exp1)
+                  (nameless-assign-exp  (apply-senv senv var) (translation-of exp1 senv)))
+      (nameless-self-exp (n) (eopl:error 'translation-of))
+      (nameless-super-call-exp (method-name rands self-n super-n) (eopl:error 'translation-of))
       (nameless-var-exp (n) (eopl:error 'translation-of))
       (nameless-assign-exp (n exp1) (eopl:error 'translation-of))
       (nameless-let-exp (exps body) (eopl:error 'translation-of))
@@ -877,7 +897,7 @@
          (apply-method (find-method class-name 'initialize) obj args)
          obj))
       ;-------------------------------------------------------------------
-      (self-exp () (apply-env env '%self))
+      (nameless-self-exp (n) (apply-nameless-env env n))
       (method-call-exp
        (obj-exp method-name rands)
        (let ([args (values-of-exps rands env)]
@@ -886,12 +906,12 @@
           (find-method (object->class-name obj) method-name)
           obj
           args)))
-      (super-call-exp
-       (method-name rands)
+      (nameless-super-call-exp
+       (method-name rands self-n super-n)
        (let ([args (values-of-exps rands env)]
-             [obj (apply-env env '%self)])
+             [obj  (apply-nameless-env env self-n)])
          (apply-method
-          (find-method (apply-env env '%super) method-name)
+          (find-method  (apply-nameless-env env super-n) method-name)
           obj
           args)))
       ;-------------------------------------------------------------------
@@ -911,6 +931,8 @@
       (nameless-proc-exp (body)
                          (proc-val
                           (procedure body env)))
+      (super-call-exp (method-name rands) (eopl:error 'value-of))
+      (self-exp () (eopl:error 'value-of))
       (var-exp (var) (eopl:error 'value-of))
       (assign-exp (x e) (eopl:error 'value-of))
       (let-exp (vars exps body) (eopl:error 'value-of))
@@ -925,10 +947,10 @@
 
       (procedure (body saved-nameless-env)
                  (let ([new-env (extend-nameless-env* (map newref vals) saved-nameless-env)])
-                   (eopl:pretty-print new-env)
+                   ;  (eopl:pretty-print new-env)
                    ;  (eopl:pretty-print the-store)
-                   (eopl:pretty-print body)
-                   (display "------------------------\n")
+                   ;  (eopl:pretty-print body)
+                   ;  (display "------------------------\n")
                    (value-of body new-env))))))
 
 
@@ -943,14 +965,15 @@
        ;  (eopl:pretty-print (map deref (object->fields self)))
        ;  (display "-----------------------------\n")
        (value-of body
-                 (extend-env vars
-                             (map newref args)
-                             (extend-env-with-self-and-super
-                              self
-                              super-name
-                              (extend-env field-names
-                                          (object->fields self)
-                                          (empty-env)))))))))
+                 (extend-nameless-env*
+                  (map newref args)
+                  (extend-nameless-env
+                   self
+                   (extend-nameless-env
+                    super-name
+                    (extend-nameless-env*
+                     (object->fields self)
+                     (empty-nameless-env))))))))))
 
 (define values-of-exps
   (lambda (exps env) (map (lambda (exp) (value-of exp env)) exps)))
@@ -968,7 +991,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; test
 (require rackunit)
-#|
+
 (define str0
   "
   class c1 extends object
@@ -1227,10 +1250,41 @@ when apply-method m2, field-names is '(x), (object->fields self) is '(37 3)
    let o1 = new c1()
    in send o1 m1(2)")
 (check-equal? (:e str11) (num-val 11))
-|#
-(define code1
+
+(define str12
   "
   letrec even(x) = if zero?(x) then true else (odd -(x, 1))
          odd(x) = if zero?(x) then false else (even -(x, 1))
-  in (even 6)
+  in list((even 6), (odd 8))
    ")
+(check-equal? (:e str12) (list-val (list (bool-val #t) (bool-val #f))))
+
+(define str13
+  "class c1 extends object
+     field x
+     method initialize() set x = 7
+     method m1() x
+     method m2() send self m1()
+  class c2 extends c1
+     field y
+     method initialize() set y = 71
+     method m1() y
+  let o2 = new c2()
+      o1 = new c1()
+  in list(send o2 m2(), send o1 m2())")
+(check-equal? (:e str13) (list-val (list (num-val 71) (num-val 7))))
+
+(define str14
+  "class c1 extends object
+     field x
+     method initialize() set x = 7
+     method getx() x
+  class c2 extends c1
+     field y
+     method initialize() begin super initialize();
+                               set y = 71
+                         end
+     method gety() y
+  let o2 = new c2()
+  in list(send o2 getx(), send o2 gety())")
+(check-equal? (:e str14) (list-val (list (num-val 7) (num-val 71))))
