@@ -636,6 +636,20 @@
 (define is-static-class?
   (lambda (name) (assq name the-static-class-env)))
 
+(define class-exist?
+  (lambda (name)
+    (let ([tmp (assq name the-static-class-env)])
+      (if tmp
+          (cases static-class
+                 (cadr tmp)
+                 (a-static-class (super-name interface-names
+                                             field-names
+                                             field-types
+                                             method-tenv)
+                                 #t)
+                 (an-interface (method-tenv) #f))
+          #f))))
+
 (define lookup-static-class
   (lambda (name)
     (cond
@@ -1057,13 +1071,16 @@
      ;; to make sure that obj-type is in fact a class type.
      ;; interp.scm calls is-subclass?, which never raises an error,
      ;; so we don't need to do anything with class-name here.
-     (cast-exp
-      (exp class-name)
-      (let ([obj-type (type-of exp tenv)])
-        (if (class-type? obj-type)
-            (class-type
-             class-name) ; should we check class-name is a valid class name?
-            (report-bad-type-to-cast obj-type exp))))
+     (cast-exp (exp class-name)
+               (let ([obj-type (type-of exp tenv)])
+                 (if (class-type? obj-type)
+                     (if (class-exist? class-name)
+                         (class-type class-name)
+                         (eopl:error 'type-of
+                                     "expected a class, got ~s"
+                                     class-name))
+
+                     (report-bad-type-to-cast obj-type exp))))
      ;; instanceof in interp.scm behaves the same way as cast:  it
      ;; calls object->class-name on its argument, so we need to
      ;; check that the argument is some kind of object, but we
@@ -1072,7 +1089,11 @@
       (exp class-name)
       (let ([obj-type (type-of exp tenv)])
         (if (class-type? obj-type)
-            (bool-type)
+            (if (class-exist? class-name)
+                (bool-type)
+                (eopl:error 'type-of
+                            "expected a class, got ~s"
+                            class-name))
             (report-bad-type-to-instanceof obj-type exp)))))))
 
 (define report-cant-instantiate-interface
@@ -1425,17 +1446,24 @@
          obj
          args)))
      ;; new cases for typed-oo
-     (cast-exp (exp c-name) ; can c-name be an interface name?
-               (let ([obj (value-of exp env)])
-                 (if (is-subclass? (object->class-name obj) c-name)
-                     obj
-                     (report-cast-error c-name obj))))
+     (cast-exp
+      (exp c-name)
+      (if (assq c-name the-class-env)
+          (let ([obj (value-of exp env)])
+            (if (is-subclass? (object->class-name obj) c-name)
+                obj
+                (report-cast-error c-name obj)))
+          (eopl:error 'value-of "class does not exist, ~s" c-name)))
      (instanceof-exp
       (exp c-name)
-      (let ([obj (value-of exp env)])
-        (if (is-subclass? (object->class-name obj) c-name)
-            (bool-val #t)
-            (bool-val #f)))))))
+      (if (assq c-name the-class-env)
+          (let ([obj (value-of exp env)])
+            (if (is-subclass? (object->class-name obj) c-name)
+                (bool-val #t)
+                (bool-val #f)))
+          (eopl:error 'value-of
+                      "class does not exist, ~s"
+                      c-name))))))
 
 (define report-cast-error
   (lambda (c-name obj)
@@ -1827,7 +1855,7 @@ in send o1 equal(o1)
    let o1 = new c1()
    in cast o1 iface
   ")
-(check-equal? (:t str14) (class-type 'iface))
+; (:t str14) ; should fail
 ; (:e str14) ;fail
 
 (define str15
@@ -1903,3 +1931,37 @@ in send o1 equal(o1)
   ")
 (check-equal? (:t str17) (list-type (int-type)))
 (check-equal? (:e str17) (list-val (list (num-val 12) (num-val 100))))
+
+(define str18
+  "
+  interface iface
+    method int m()
+
+  class c1 extends object implements iface
+    method int initialize() 0
+    method int m() 0
+
+  class c2 extends c1
+
+  let o1 = new c2()
+  in instanceof o1 iface
+  ")
+; (:t str18) ;should fail
+; (:e str18) ;should fail
+
+(define str19
+  "
+  interface iface
+    method int m()
+
+  class c1 extends object implements iface
+    method int initialize() 0
+    method int m() 0
+
+  class c2 extends c1
+
+  let o1 = new c2()
+  in cast o1 iface
+  ")
+; (:t str19) ;should fail
+; (:e str19) ;should fail

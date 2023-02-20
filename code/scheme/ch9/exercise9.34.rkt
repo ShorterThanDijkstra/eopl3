@@ -15,39 +15,32 @@
     (expression ("-" "(" expression "," expression ")") diff-exp)
     (expression ("+" "(" expression "," expression ")") sum-exp)
     (expression ("zero?" "(" expression ")") zero?-exp)
-    (expression ("if" expression "then" expression "else" expression)
-                if-exp)
+    (expression ("if" expression "then" expression "else" expression) if-exp)
     (expression (identifier) var-exp)
+    (expression ("let" (arbno identifier "=" expression) "in" expression)
+                let-exp)
     (expression
-     ("let" (arbno identifier "=" expression) "in" expression)
-     let-exp)
-    (expression ("proc" "("
-                        (separated-list identifier ":" type ",")
-                        ")"
-                        expression)
-                proc-exp)
+     ("proc" "(" (separated-list identifier ":" type ",") ")" expression)
+     proc-exp)
     (expression ("(" expression (arbno expression) ")") call-exp)
-    (expression
-     ("letrec" (arbno type
-                      identifier
-                      "("
-                      (separated-list identifier ":" type ",")
-                      ")"
-                      "="
-                      expression)
-               "in"
-               expression)
-     letrec-exp)
-    (expression ("begin" expression (arbno ";" expression) "end")
-                begin-exp)
+    (expression ("letrec" (arbno type
+                                 identifier
+                                 "("
+                                 (separated-list identifier ":" type ",")
+                                 ")"
+                                 "="
+                                 expression)
+                          "in"
+                          expression)
+                letrec-exp)
+    (expression ("begin" expression (arbno ";" expression) "end") begin-exp)
     (expression ("set" identifier "=" expression) assign-exp)
     (expression ("null?" "(" expression ")") null?-exp)
     (expression ("car" "(" expression ")") car-exp)
     (expression ("cdr" "(" expression ")") cdr-exp)
     (expression ("cons" "(" expression "," expression ")") cons-exp)
     ;; non-empty lists for typechecked version
-    (expression ("list" "(" expression (arbno "," expression) ")")
-                list-exp)
+    (expression ("list" "(" expression (arbno "," expression) ")") list-exp)
     ;; new productions for oop
     (class-decl ("class" identifier
                          "extends"
@@ -63,29 +56,20 @@
                            ")" ; method formals
                            expression)
                  a-method-decl)
-    (expression
-     ("new" identifier "(" (separated-list expression ",") ")")
-     new-object-exp)
+    (expression ("new" identifier "(" (separated-list expression ",") ")")
+                new-object-exp)
     ;; this is special-cased to prevent it from mutation
     (expression ("self") self-exp)
-    (expression ("send" expression
-                        identifier
-                        "("
-                        (separated-list expression ",")
-                        ")")
-                method-call-exp)
     (expression
-     ("super" identifier "(" (separated-list expression ",") ")")
-     super-call-exp)
+     ("send" expression identifier "(" (separated-list expression ",") ")")
+     method-call-exp)
+    (expression ("super" identifier "(" (separated-list expression ",") ")")
+                super-call-exp)
     ;; new productions for typed-oo
     (class-decl ("interface" identifier (arbno abstract-method-decl))
                 an-interface-decl)
     (abstract-method-decl
-     ("method" type
-               identifier
-               "("
-               (separated-list identifier ":" type ",")
-               ")")
+     ("method" type identifier "(" (separated-list identifier ":" type ",") ")")
      an-abstract-method-decl)
     (expression ("cast" expression identifier) cast-exp)
     (expression ("instanceof" expression identifier) instanceof-exp)
@@ -100,23 +84,18 @@
 (sllgen:make-define-datatypes the-lexical-spec the-grammar)
 
 (define show-the-datatypes
-  (lambda ()
-    (sllgen:list-define-datatypes the-lexical-spec the-grammar)))
+  (lambda () (sllgen:list-define-datatypes the-lexical-spec the-grammar)))
 
-(define scan&parse
-  (sllgen:make-string-parser the-lexical-spec the-grammar))
+(define scan&parse (sllgen:make-string-parser the-lexical-spec the-grammar))
 
-(define just-scan
-  (sllgen:make-string-scanner the-lexical-spec the-grammar))
+(define just-scan (sllgen:make-string-scanner the-lexical-spec the-grammar))
 
 (define type->class-name
   (lambda (ty)
     (cases type
            ty
            (class-type (name) name)
-           (else (eopl:error 'type->class-name
-                             "Not a class type: ~s"
-                             ty)))))
+           (else (eopl:error 'type->class-name "Not a class type: ~s" ty)))))
 
 (define class-type?
   (lambda (ty) (cases type ty (class-type (name) #t) (else #f))))
@@ -130,11 +109,10 @@
            (void-type () 'void)
            (class-type (name) name)
            (list-type (ty) (list 'listof (type-to-external-form ty)))
-           (proc-type
-            (arg-types result-type)
-            (append (formal-types-to-external-form arg-types)
-                    '(->)
-                    (list (type-to-external-form result-type)))))))
+           (proc-type (arg-types result-type)
+                      (append (formal-types-to-external-form arg-types)
+                              '(->)
+                              (list (type-to-external-form result-type)))))))
 
 (define formal-types-to-external-form
   (lambda (types)
@@ -143,9 +121,7 @@
         (if (null? (cdr types))
             (list (type-to-external-form (car types)))
             (cons (type-to-external-form (car types))
-                  (cons '*
-                        (formal-types-to-external-form
-                         (cdr types))))))))
+                  (cons '* (formal-types-to-external-form (cdr types))))))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; store
 (define instrument-newref (make-parameter #f))
@@ -179,10 +155,9 @@
     (let ([next-ref (length the-store)])
       (set! the-store (append the-store (list val)))
       (when (instrument-newref)
-        (eopl:printf
-         "newref: allocating location ~s with initial contents ~s~%"
-         next-ref
-         val))
+        (eopl:printf "newref: allocating location ~s with initial contents ~s~%"
+                     next-ref
+                     val))
       next-ref)))
 
 ;; deref : Ref -> ExpVal
@@ -198,8 +173,7 @@
               [setref-inner
                (lambda (store1 ref1)
                  (cond
-                   [(null? store1)
-                    (report-invalid-reference ref the-store)]
+                   [(null? store1) (report-invalid-reference ref the-store)]
                    [(zero? ref1) (cons val (cdr store1))]
                    [else
                     (cons (car store1)
@@ -208,10 +182,7 @@
 
 (define report-invalid-reference
   (lambda (ref the-store)
-    (eopl:error 'setref
-                "illegal reference ~s in store ~s"
-                ref
-                the-store)))
+    (eopl:error 'setref "illegal reference ~s in store ~s" ref the-store)))
 
 ;; get-store-as-list : () -> Listof(List(Ref,Expval))
 ;; Exports the current state of the store as a scheme list.
@@ -223,12 +194,11 @@
 (define get-store-as-list
   (lambda ()
     (letrec (;; convert sto to list as if its car was location n
-             [inner-loop
-              (lambda (sto n)
-                (if (null? sto)
-                    '()
-                    (cons (list n (car sto))
-                          (inner-loop (cdr sto) (+ n 1)))))])
+             [inner-loop (lambda (sto n)
+                           (if (null? sto)
+                               '()
+                               (cons (list n (car sto))
+                                     (inner-loop (cdr sto) (+ n 1)))))])
       (inner-loop the-store 0))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -248,10 +218,10 @@
 ;; new-object : ClassName -> Obj
 (define new-object
   (lambda (class-name)
-    (an-object class-name
-               (map (lambda (field-name)
-                      (newref (list 'uninitialized-field field-name)))
-                    (class->field-names (lookup-class class-name))))))
+    (an-object
+     class-name
+     (map (lambda (field-name) (newref (list 'uninitialized-field field-name)))
+          (class->field-names (lookup-class class-name))))))
 
 ;;;;;;;;;;;;;;;; methods and method environments ;;;;;;;;;;;;;;;;
 
@@ -267,8 +237,7 @@
 ;; a method environment looks like ((method-name method) ...)
 
 (define method-environment?
-  (list-of (lambda (p)
-             (and (pair? p) (symbol? (car p)) (method? (cadr p))))))
+  (list-of (lambda (p) (and (pair? p) (symbol? (car p)) (method? (cadr p))))))
 
 ;; method-env * id -> (maybe method)
 (define assq-method-env
@@ -305,8 +274,7 @@
               m-decl
               (a-method-decl
                (result-type method-name vars var-types body)
-               (list method-name
-                     (a-method vars body super-name field-names)))))
+               (list method-name (a-method vars body super-name field-names)))))
      m-decls)))
 
 ;;;;;;;;;;;;;;;; classes ;;;;;;;;;;;;;;;;
@@ -327,8 +295,7 @@
 ;; add-to-class-env! : ClassName * Class -> Unspecified
 (define add-to-class-env!
   (lambda (class-name class)
-    (set! the-class-env
-          (cons (list class-name class) the-class-env))))
+    (set! the-class-env (cons (list class-name class) the-class-env))))
 
 ;; lookup-class : ClassName -> Class
 (define lookup-class
@@ -361,8 +328,7 @@
                         field-names
                         method-decls)
             (let ([field-names (append-field-names
-                                (class->field-names
-                                 (lookup-class super-name))
+                                (class->field-names (lookup-class super-name))
                                 field-names)])
               (add-to-class-env!
                class-name
@@ -370,10 +336,9 @@
                         field-names
                         (merge-method-envs
                          (class->method-env (lookup-class super-name))
-                         (method-decls->method-env
-                          method-decls
-                          super-name
-                          field-names)))))))))
+                         (method-decls->method-env method-decls
+                                                   super-name
+                                                   field-names)))))))))
 
 ;; append-field-names :  Listof(FieldName) * Listof(FieldName) -> Listof(FieldName)
 ;; like append, except that any super-field that is shadowed by a
@@ -400,8 +365,7 @@
   (lambda (c-struct)
     (cases class
            c-struct
-           (a-class (super-name field-names method-env)
-                    field-names))))
+           (a-class (super-name field-names method-env) field-names))))
 
 (define class->method-env
   (lambda (c-struct)
@@ -410,12 +374,10 @@
            (a-class (super-name field-names method-env) method-env))))
 
 (define object->class-name
-  (lambda (obj)
-    (cases object obj (an-object (class-name fields) class-name))))
+  (lambda (obj) (cases object obj (an-object (class-name fields) class-name))))
 
 (define object->fields
-  (lambda (obj)
-    (cases object obj (an-object (class-decl fields) fields))))
+  (lambda (obj) (cases object obj (an-object (class-decl fields) fields))))
 
 (define fresh-identifier
   (let ([sn 0])
@@ -485,67 +447,59 @@
 
 (define expval-extractor-error
   (lambda (variant value)
-    (eopl:error 'expval-extractors
-                "Looking for a ~s, found ~s"
-                variant
-                value)))
+    (eopl:error 'expval-extractors "Looking for a ~s, found ~s" variant value)))
 
 ;;;;;;;;;;;;;;;; procedures ;;;;;;;;;;;;;;;;
 
-(define-datatype proc
-                 proc?
-                 (procedure (vars (list-of symbol?))
-                            (body expression?)
-                            (env environment?)))
-
 (define-datatype
- environment
- environment?
- (empty-env)
- (extend-env (bvars (list-of symbol?))
-             (bvals (list-of reference?))
-             (saved-env environment?))
- (extend-env-rec** (proc-names (list-of symbol?))
-                   (b-varss (list-of (list-of symbol?)))
-                   (proc-bodies (list-of expression?))
-                   (saved-env environment?))
- (extend-env-with-self-and-super (self object?)
-                                 (super-name symbol?)
-                                 (saved-env environment?)))
+ proc
+ proc?
+ (procedure (vars (list-of symbol?)) (body expression?) (env environment?)))
+
+(define-datatype environment
+                 environment?
+                 (empty-env)
+                 (extend-env (bvars (list-of symbol?))
+                             (bvals (list-of reference?))
+                             (saved-env environment?))
+                 (extend-env-rec** (proc-names (list-of symbol?))
+                                   (b-varss (list-of (list-of symbol?)))
+                                   (proc-bodies (list-of expression?))
+                                   (saved-env environment?))
+                 (extend-env-with-self-and-super (self object?)
+                                                 (super-name symbol?)
+                                                 (saved-env environment?)))
 
 ;; env->list : Env -> List
 ;; used for pretty-printing and debugging
 (define env->list
   (lambda (env)
-    (cases environment
-           env
-           (empty-env () '())
-           (extend-env (sym val saved-env)
-                       (cons (list sym val) (env->list saved-env)))
-           (extend-env-rec** (p-names b-varss p-bodies saved-env)
-                             (cons (list 'letrec p-names '...)
-                                   (env->list saved-env)))
-           (extend-env-with-self-and-super
-            (self super-name saved-env)
-            (cons (list 'self self 'super super-name)
-                  (env->list saved-env))))))
+    (cases
+     environment
+     env
+     (empty-env () '())
+     (extend-env (sym val saved-env)
+                 (cons (list sym val) (env->list saved-env)))
+     (extend-env-rec** (p-names b-varss p-bodies saved-env)
+                       (cons (list 'letrec p-names '...) (env->list saved-env)))
+     (extend-env-with-self-and-super (self super-name saved-env)
+                                     (cons (list 'self self 'super super-name)
+                                           (env->list saved-env))))))
 
 ;; expval->printable : ExpVal -> List
 ;; returns a value like its argument, except procedures get cleaned
 ;; up with env->list
 (define expval->printable
   (lambda (val)
-    (cases
-     expval
-     val
-     (proc-val
-      (p)
-      (cases proc
-             p
-             (procedure
-              (var body saved-env)
-              (list 'procedure var '... (env->list saved-env)))))
-     (else val))))
+    (cases expval
+           val
+           (proc-val (p)
+                     (cases proc
+                            p
+                            (procedure
+                             (var body saved-env)
+                             (list 'procedure var '... (env->list saved-env)))))
+           (else val))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; static data structures
@@ -562,18 +516,14 @@
 
 (define init-tenv
   (lambda ()
-    (extend-tenv '(true false)
-                 (list (bool-type) (bool-type))
-                 (empty-tenv))))
+    (extend-tenv '(true false) (list (bool-type) (bool-type)) (empty-tenv))))
 
 (define apply-tenv
   (lambda (env search-sym)
     (cases
      type-environment
      env
-     (empty-tenv
-      ()
-      (eopl:error 'apply-tenv "No type found for ~s" search-sym))
+     (empty-tenv () (eopl:error 'apply-tenv "No type found for ~s" search-sym))
      (extend-tenv (bvars types saved-env)
                   (cond
                     [(location search-sym bvars)
@@ -591,18 +541,16 @@
 ;;; static classes
 
 (define method-tenv?
-  (list-of (lambda (p)
-             (and (pair? p) (symbol? (car p)) (type? (cadr p))))))
+  (list-of (lambda (p) (and (pair? p) (symbol? (car p)) (type? (cadr p))))))
 
-(define-datatype
- static-class
- static-class?
- (a-static-class (super-name (maybe identifier?))
-                 (interface-names (list-of identifier?))
-                 (field-names (list-of identifier?))
-                 (field-types (list-of type?))
-                 (method-tenv method-tenv?))
- (an-interface (method-tenv method-tenv?)))
+(define-datatype static-class
+                 static-class?
+                 (a-static-class (super-name (maybe identifier?))
+                                 (interface-names (list-of identifier?))
+                                 (field-names (list-of identifier?))
+                                 (field-types (list-of type?))
+                                 (method-tenv method-tenv?))
+                 (an-interface (method-tenv method-tenv?)))
 
 ;; method-tenv * id -> (maybe type)
 (define maybe-find-method-type
@@ -616,10 +564,9 @@
 ;; class-name * id -> type OR fail
 (define find-method-type
   (lambda (class-name id)
-    (let ([m (maybe-find-method-type
-              (static-class->method-tenv
-               (lookup-static-class class-name))
-              id)])
+    (let ([m (maybe-find-method-type (static-class->method-tenv
+                                      (lookup-static-class class-name))
+                                     id)])
       (if m
           m
           (eopl:error 'find-method
@@ -633,8 +580,20 @@
 
 (define the-static-class-env '())
 
-(define is-static-class?
-  (lambda (name) (assq name the-static-class-env)))
+(define is-static-class? (lambda (name) (assq name the-static-class-env)))
+
+(define class-exist?
+  (lambda (name)
+    (let ([tmp (assq name the-static-class-env)])
+      (if tmp
+          (cases
+           static-class
+           (cadr tmp)
+           (a-static-class
+            (super-name interface-names field-names field-types method-tenv)
+            #t)
+           (an-interface (method-tenv) #f))
+          #f))))
 
 (define lookup-static-class
   (lambda (name)
@@ -642,16 +601,13 @@
       [(assq name the-static-class-env)
        =>
        (lambda (pair) (cadr pair))]
-      [else
-       (eopl:error 'lookup-static-class "Unknown class: ~s" name)])))
+      [else (eopl:error 'lookup-static-class "Unknown class: ~s" name)])))
 
-(define empty-the-static-class-env!
-  (lambda () (set! the-static-class-env '())))
+(define empty-the-static-class-env! (lambda () (set! the-static-class-env '())))
 
 (define add-static-class-binding!
   (lambda (name sc)
-    (set! the-static-class-env
-          (cons (list name sc) the-static-class-env))))
+    (set! the-static-class-env (cons (list name sc) the-static-class-env))))
 
 ;;;;;;;;;;;;;;;; class declarations, etc. ;;;;;;;;;;;;;;;;
 
@@ -662,8 +618,7 @@
 (define initialize-static-class-env!
   (lambda (c-decls)
     (empty-the-static-class-env!)
-    (add-static-class-binding! 'object
-                               (a-static-class #f '() '() '() '()))
+    (add-static-class-binding! 'object (a-static-class #f '() '() '() '()))
     (for-each add-class-decl-to-static-class-env! c-decls)))
 
 ;; add-class-decl-to-static-class-env! : ClassDecl -> Unspecified
@@ -682,29 +637,24 @@
       (let ([i-names (append (static-class->interface-names
                               (lookup-static-class s-name))
                              i-names)]
-            [f-names (append-field-names
-                      (static-class->field-names
-                       (lookup-static-class s-name))
-                      f-names)]
+            [f-names (append-field-names (static-class->field-names
+                                          (lookup-static-class s-name))
+                                         f-names)]
             [f-types (append (static-class->field-types
                               (lookup-static-class s-name))
                              f-types)]
             [method-tenv
-             (let ([local-method-tenv
-                    (method-decls->method-tenv m-decls)])
+             (let ([local-method-tenv (method-decls->method-tenv m-decls)])
                (check-no-dups! (map car local-method-tenv) c-name)
-               (merge-method-tenvs (static-class->method-tenv
-                                    (lookup-static-class s-name))
-                                   local-method-tenv))])
+               (merge-method-tenvs
+                (static-class->method-tenv (lookup-static-class s-name))
+                local-method-tenv))])
         (check-no-dups! i-names c-name)
         (check-no-dups! f-names c-name)
         (check-for-initialize! method-tenv c-name)
-        (add-static-class-binding! c-name
-                                   (a-static-class s-name
-                                                   i-names
-                                                   f-names
-                                                   f-types
-                                                   method-tenv)))))))
+        (add-static-class-binding!
+         c-name
+         (a-static-class s-name i-names f-names f-types method-tenv)))))))
 
 (define abs-method-decls->method-tenv
   (lambda (abs-m-decls)
@@ -718,13 +668,13 @@
 
 (define method-decls->method-tenv
   (lambda (m-decls)
-    (map (lambda (m-decl)
-           (cases method-decl
-                  m-decl
-                  (a-method-decl
-                   (result-type m-name arg-ids arg-types body)
-                   (list m-name (proc-type arg-types result-type)))))
-         m-decls)))
+    (map
+     (lambda (m-decl)
+       (cases method-decl
+              m-decl
+              (a-method-decl (result-type m-name arg-ids arg-types body)
+                             (list m-name (proc-type arg-types result-type)))))
+     m-decls)))
 
 ;; new methods override old ones.
 (define merge-method-tenvs
@@ -743,59 +693,46 @@
   (lambda (sc)
     (cases static-class
            sc
-           (a-static-class (super-name interface-names
-                                       field-names
-                                       field-types
-                                       method-types)
-                           super-name)
-           (else (report-static-class-extractor-error 'super-name
-                                                      sc)))))
+           (a-static-class
+            (super-name interface-names field-names field-types method-types)
+            super-name)
+           (else (report-static-class-extractor-error 'super-name sc)))))
 
 (define static-class->interface-names
   (lambda (sc)
     (cases static-class
            sc
-           (a-static-class (super-name interface-names
-                                       field-names
-                                       field-types
-                                       method-types)
-                           interface-names)
-           (else (report-static-class-extractor-error 'interface-names
-                                                      sc)))))
+           (a-static-class
+            (super-name interface-names field-names field-types method-types)
+            interface-names)
+           (else (report-static-class-extractor-error 'interface-names sc)))))
 
 (define static-class->field-names
   (lambda (sc)
     (cases static-class
            sc
-           (a-static-class (super-name interface-names
-                                       field-names
-                                       field-types
-                                       method-types)
-                           field-names)
-           (else (report-static-class-extractor-error 'field-names
-                                                      sc)))))
+           (a-static-class
+            (super-name interface-names field-names field-types method-types)
+            field-names)
+           (else (report-static-class-extractor-error 'field-names sc)))))
 
 (define static-class->field-types
   (lambda (sc)
     (cases static-class
            sc
-           (a-static-class (super-name interface-names
-                                       field-names
-                                       field-types
-                                       method-types)
-                           field-types)
-           (else (report-static-class-extractor-error 'field-types
-                                                      sc)))))
+           (a-static-class
+            (super-name interface-names field-names field-types method-types)
+            field-types)
+           (else (report-static-class-extractor-error 'field-types sc)))))
 
 (define static-class->method-tenv
   (lambda (sc)
-    (cases
-     static-class
-     sc
-     (a-static-class
-      (super-name interface-names field-names field-types method-tenv)
-      method-tenv)
-     (an-interface (method-tenv) method-tenv))))
+    (cases static-class
+           sc
+           (a-static-class
+            (super-name interface-names field-names field-types method-tenv)
+            method-tenv)
+           (an-interface (method-tenv) method-tenv))))
 
 (define report-static-class-extractor-error
   (lambda (sym sc)
@@ -829,45 +766,41 @@
 
 (define init-env
   (lambda ()
-    (extend-env1
-     'true
-     (newref (bool-val #t))
-     (extend-env1 'false (newref (bool-val #f)) (empty-env)))))
+    (extend-env1 'true
+                 (newref (bool-val #t))
+                 (extend-env1 'false (newref (bool-val #f)) (empty-env)))))
 
-(define extend-env1
-  (lambda (id val env) (extend-env (list id) (list val) env)))
+(define extend-env1 (lambda (id val env) (extend-env (list id) (list val) env)))
 
 ;;;;;;;;;;;;;;;; environment constructors and observers ;;;;;;;;;;;;;;;;
 
 (define apply-env
   (lambda (env search-sym)
-    (cases environment
-           env
-           (empty-env
-            ()
-            (eopl:error 'apply-env "No binding for ~s" search-sym))
-           (extend-env (bvars bvals saved-env)
+    (cases
+     environment
+     env
+     (empty-env () (eopl:error 'apply-env "No binding for ~s" search-sym))
+     (extend-env (bvars bvals saved-env)
+                 (cond
+                   [(location search-sym bvars)
+                    =>
+                    (lambda (n) (list-ref bvals n))]
+                   [else (apply-env saved-env search-sym)]))
+     (extend-env-rec** (p-names b-varss p-bodies saved-env)
                        (cond
-                         [(location search-sym bvars)
+                         [(location search-sym p-names)
                           =>
-                          (lambda (n) (list-ref bvals n))]
+                          (lambda (n)
+                            (newref (proc-val (procedure (list-ref b-varss n)
+                                                         (list-ref p-bodies n)
+                                                         env))))]
                          [else (apply-env saved-env search-sym)]))
-           (extend-env-rec**
-            (p-names b-varss p-bodies saved-env)
-            (cond
-              [(location search-sym p-names)
-               =>
-               (lambda (n)
-                 (newref (proc-val (procedure (list-ref b-varss n)
-                                              (list-ref p-bodies n)
-                                              env))))]
-              [else (apply-env saved-env search-sym)]))
-           (extend-env-with-self-and-super
-            (self super-name saved-env)
-            (case search-sym
-              [(%self) self]
-              [(%super) super-name]
-              [else (apply-env saved-env search-sym)])))))
+     (extend-env-with-self-and-super
+      (self super-name saved-env)
+      (case search-sym
+        [(%self) self]
+        [(%super) super-name]
+        [else (apply-env saved-env search-sym)])))))
 
 ;; location : Sym * Listof(Sym) -> Maybe(Int)
 ;; (location sym syms) returns the location of sym in syms or #f is
@@ -905,14 +838,12 @@
      (const-exp (num) (int-type))
      (var-exp (var) (apply-tenv tenv var))
      (diff-exp (exp1 exp2)
-               (let ([type1 (type-of exp1 tenv)]
-                     [type2 (type-of exp2 tenv)])
+               (let ([type1 (type-of exp1 tenv)] [type2 (type-of exp2 tenv)])
                  (check-equal-type! type1 (int-type) exp1)
                  (check-equal-type! type2 (int-type) exp2)
                  (int-type)))
      (sum-exp (exp1 exp2)
-              (let ([type1 (type-of exp1 tenv)]
-                    [type2 (type-of exp2 tenv)])
+              (let ([type1 (type-of exp1 tenv)] [type2 (type-of exp2 tenv)])
                 (check-equal-type! type1 (int-type) exp1)
                 (check-equal-type! type2 (int-type) exp2)
                 (int-type)))
@@ -928,41 +859,31 @@
                (check-equal-type! test-type (bool-type) test-exp)
                (check-equal-type! true-type false-type exp)
                true-type))
-     (let-exp
-      (ids rands body)
-      (let ([new-tenv
-             (extend-tenv ids (types-of-exps rands tenv) tenv)])
-        (type-of body new-tenv)))
-     (proc-exp
-      (bvars bvar-types body)
-      (let ([result-type
-             (type-of body (extend-tenv bvars bvar-types tenv))])
-        (proc-type bvar-types result-type)))
+     (let-exp (ids rands body)
+              (let ([new-tenv
+                     (extend-tenv ids (types-of-exps rands tenv) tenv)])
+                (type-of body new-tenv)))
+     (proc-exp (bvars bvar-types body)
+               (let ([result-type
+                      (type-of body (extend-tenv bvars bvar-types tenv))])
+                 (proc-type bvar-types result-type)))
      (call-exp (rator rands)
                (let ([rator-type (type-of rator tenv)]
                      [rand-types (types-of-exps rands tenv)])
                  (type-of-call rator-type rand-types rands exp)))
      (letrec-exp
-      (proc-result-types proc-names
-                         bvarss
-                         bvar-typess
-                         proc-bodies
-                         letrec-body)
+      (proc-result-types proc-names bvarss bvar-typess proc-bodies letrec-body)
       (let ([tenv-for-letrec-body
-             (extend-tenv
-              proc-names
-              (map proc-type bvar-typess proc-result-types)
-              tenv)])
+             (extend-tenv proc-names
+                          (map proc-type bvar-typess proc-result-types)
+                          tenv)])
         (for-each
          (lambda (proc-result-type bvar-types bvars proc-body)
            (let ([proc-body-type
-                  (type-of proc-body
-                           (extend-tenv bvars
-                                        bvar-types
-                                        tenv-for-letrec-body))]) ;; !!
-             (check-equal-type! proc-body-type
-                                proc-result-type
-                                proc-body)))
+                  (type-of
+                   proc-body
+                   (extend-tenv bvars bvar-types tenv-for-letrec-body))]) ;; !!
+             (check-equal-type! proc-body-type proc-result-type proc-body)))
          proc-result-types
          bvar-typess
          bvarss
@@ -973,85 +894,75 @@
       (letrec ([type-of-begins
                 (lambda (e1 es)
                   (let ([v1 (type-of e1 tenv)])
-                    (if (null? es)
-                        v1
-                        (type-of-begins (car es) (cdr es)))))])
+                    (if (null? es) v1 (type-of-begins (car es) (cdr es)))))])
         (type-of-begins exp1 exps)))
-     (assign-exp
-      (id rhs)
-      (check-is-subtype! (type-of rhs tenv) (apply-tenv tenv id) exp)
-      (void-type))
+     (assign-exp (id rhs)
+                 (check-is-subtype! (type-of rhs tenv) (apply-tenv tenv id) exp)
+                 (void-type))
      (null?-exp (exp1)
                 (let ([ty1 (type-of exp1 tenv)])
                   (cases type
                          ty1
                          (list-type (_) (bool-type))
                          (else (eopl:error 'type-of)))))
-     (car-exp (exp1)
-              (let ([ty1 (type-of exp1 tenv)])
-                (cases type
-                       ty1
-                       (list-type (ty2) ty2)
-                       (else (eopl:error 'type-of)))))
+     (car-exp
+      (exp1)
+      (let ([ty1 (type-of exp1 tenv)])
+        (cases type ty1 (list-type (ty2) ty2) (else (eopl:error 'type-of)))))
      (cdr-exp (exp1)
               (let ([ty1 (type-of exp1 tenv)])
                 (cases type
                        ty1
                        (list-type (ty2) (list-type ty2))
                        (else (eopl:error 'type-of)))))
-     (cons-exp
-      (exp1 exp2)
-      (let ([ty1 (type-of exp1 tenv)] [ty2 (type-of exp2 tenv)])
-        (cases type
-               ty2
-               (list-type (ty3) (check-equal-type! ty1 ty3 exp) ty2)
-               (else (eopl:error 'type-of)))))
+     (cons-exp (exp1 exp2)
+               (let ([ty1 (type-of exp1 tenv)] [ty2 (type-of exp2 tenv)])
+                 (cases type
+                        ty2
+                        (list-type (ty3) (check-equal-type! ty1 ty3 exp) ty2)
+                        (else (eopl:error 'type-of)))))
      (list-exp
       (exp1 exps)
       (let ([type-of-car (type-of exp1 tenv)])
-        (for-each
-         (lambda (exp)
-           (check-equal-type! (type-of exp tenv) type-of-car exp))
-         exps)
+        (for-each (lambda (exp)
+                    (check-equal-type! (type-of exp tenv) type-of-car exp))
+                  exps)
         (list-type type-of-car)))
      ;; object stuff begins here
      (new-object-exp
       (class-name rands)
       (let ([arg-types (types-of-exps rands tenv)]
             [c (lookup-static-class class-name)])
-        (cases
-         static-class
-         c
-         (an-interface (method-tenv)
-                       (report-cant-instantiate-interface class-name))
-         (a-static-class
-          (super-name i-names field-names field-types method-tenv)
-          ;; check the call to initialize
-          (type-of-call (find-method-type class-name 'initialize)
-                        arg-types
-                        rands
-                        exp)
-          ;; and return the class name as a type
-          (class-type class-name)))))
+        (cases static-class
+               c
+               (an-interface (method-tenv)
+                             (report-cant-instantiate-interface class-name))
+               (a-static-class
+                (super-name i-names field-names field-types method-tenv)
+                ;; check the call to initialize
+                (type-of-call (find-method-type class-name 'initialize)
+                              arg-types
+                              rands
+                              exp)
+                ;; and return the class name as a type
+                (class-type class-name)))))
      (self-exp () (apply-tenv tenv '%self))
-     (method-call-exp (obj-exp method-name rands)
-                      (let ([arg-types (types-of-exps rands tenv)]
-                            [obj-type (type-of obj-exp tenv)])
-                        (type-of-call (find-method-type
-                                       (type->class-name obj-type)
-                                       method-name)
-                                      arg-types
-                                      rands
-                                      exp)))
+     (method-call-exp
+      (obj-exp method-name rands)
+      (let ([arg-types (types-of-exps rands tenv)]
+            [obj-type (type-of obj-exp tenv)])
+        (type-of-call (find-method-type (type->class-name obj-type) method-name)
+                      arg-types
+                      rands
+                      exp)))
      (super-call-exp
       (method-name rands)
       (let ([arg-types (types-of-exps rands tenv)]
             [obj-type (apply-tenv tenv '%self)])
-        (type-of-call
-         (find-method-type (apply-tenv tenv '%super) method-name)
-         arg-types
-         rands
-         exp)))
+        (type-of-call (find-method-type (apply-tenv tenv '%super) method-name)
+                      arg-types
+                      rands
+                      exp)))
      ;; this matches interp.scm:  interp.scm calls
      ;; object->class-name, which fails on a non-object, so we need
      ;; to make sure that obj-type is in fact a class type.
@@ -1061,8 +972,17 @@
       (exp class-name)
       (let ([obj-type (type-of exp tenv)])
         (if (class-type? obj-type)
-            (class-type
-             class-name) ; should we check class-name is a valid class name?
+            (if (class-exist? class-name)
+                (let ([obj-class-name (type->class-name obj-type)])
+                  (if (or (statically-is-subclass? class-name obj-class-name)
+                          (statically-is-subclass? obj-class-name class-name))
+                      (class-type class-name)
+                      (eopl:error 'type-of
+                                  "~s is not a subclass of ~s, nor vice versa"
+                                  class-name
+                                  obj-class-name)))
+                (eopl:error 'type-of "expected a class, got ~s" class-name))
+
             (report-bad-type-to-cast obj-type exp))))
      ;; instanceof in interp.scm behaves the same way as cast:  it
      ;; calls object->class-name on its argument, so we need to
@@ -1072,7 +992,19 @@
       (exp class-name)
       (let ([obj-type (type-of exp tenv)])
         (if (class-type? obj-type)
-            (bool-type)
+            (if (class-exist? class-name)
+
+                (bool-type)
+                ; (let ([obj-class-name (type->class-name obj-type)])
+                ;   (if (or (statically-is-subclass? class-name obj-class-name)
+                ;           (statically-is-subclass? obj-class-name class-name))
+                ;       (bool-type)
+                ;       (eopl:error 'type-of
+                ;                   "~s is not a subclass of ~s, nor vice versa"
+                ;                   class-name
+                ;                   obj-class-name)))
+
+                (eopl:error 'type-of "expected a class, got ~s" class-name))
             (report-bad-type-to-instanceof obj-type exp)))))))
 
 (define report-cant-instantiate-interface
@@ -1090,15 +1022,13 @@
     (cases
      type
      rator-type
-     (proc-type
-      (arg-types result-type)
-      (when (not (= (length arg-types) (length rand-types)))
-        (report-wrong-number-of-arguments arg-types rand-types exp))
-      (for-each check-is-subtype! rand-types arg-types rands)
-      result-type)
-     (else (report-rator-not-of-proc-type
-            (type-to-external-form rator-type)
-            exp)))))
+     (proc-type (arg-types result-type)
+                (when (not (= (length arg-types) (length rand-types)))
+                  (report-wrong-number-of-arguments arg-types rand-types exp))
+                (for-each check-is-subtype! rand-types arg-types rands)
+                result-type)
+     (else (report-rator-not-of-proc-type (type-to-external-form rator-type)
+                                          exp)))))
 
 (define report-rator-not-of-proc-type
   (lambda (external-form-rator-type exp)
@@ -1122,22 +1052,16 @@
            c-decl
            (an-interface-decl (i-name abs-method-decls) #t)
            (a-class-decl
-            (class-name super-name
-                        i-names
-                        field-types
-                        field-names
-                        method-decls)
+            (class-name super-name i-names field-types field-names method-decls)
             (let ([sc (lookup-static-class class-name)])
               (for-each (lambda (method-decl)
-                          (check-method-decl!
-                           method-decl
-                           class-name
-                           super-name
-                           (static-class->field-names sc)
-                           (static-class->field-types sc)))
+                          (check-method-decl! method-decl
+                                              class-name
+                                              super-name
+                                              (static-class->field-names sc)
+                                              (static-class->field-types sc)))
                         method-decls))
-            (for-each (lambda (i-name)
-                        (check-if-implements! class-name i-name))
+            (for-each (lambda (i-name) (check-if-implements! class-name i-name))
                       i-names)))))
 
 ;; check-method-decl! :
@@ -1150,13 +1074,12 @@
      m-decl
      (a-method-decl
       (res-type m-name vars var-types body)
-      (let ([tenv (extend-tenv
-                   vars
-                   var-types
-                   (extend-tenv-with-self-and-super
-                    (class-type self-name)
-                    s-name
-                    (extend-tenv f-names f-types (init-tenv))))])
+      (let ([tenv (extend-tenv vars
+                               var-types
+                               (extend-tenv-with-self-and-super
+                                (class-type self-name)
+                                s-name
+                                (extend-tenv f-names f-types (init-tenv))))])
         (let ([body-type (type-of body tenv)])
           (check-is-subtype! body-type res-type m-decl)
           (if (eqv? m-name 'initialize)
@@ -1177,20 +1100,17 @@
     (cases
      static-class
      (lookup-static-class i-name)
-     (a-static-class
-      (s-name i-names f-names f-types m-tenv)
-      (report-cant-implement-non-interface c-name i-name))
+     (a-static-class (s-name i-names f-names f-types m-tenv)
+                     (report-cant-implement-non-interface c-name i-name))
      (an-interface
       (method-tenv)
       (let ([class-method-tenv (static-class->method-tenv
                                 (lookup-static-class c-name))])
         (for-each
          (lambda (method-binding)
-           (let ([m-name (car method-binding)]
-                 [m-type (cadr method-binding)])
-             (let ([c-method-type (maybe-find-method-type
-                                   class-method-tenv
-                                   m-name)])
+           (let ([m-name (car method-binding)] [m-type (cadr method-binding)])
+             (let ([c-method-type
+                    (maybe-find-method-type class-method-tenv m-name)])
                (if c-method-type
                    (check-is-subtype! c-method-type m-type c-name)
                    (report-missing-method c-name i-name m-name)))))
@@ -1250,17 +1170,15 @@
             (name1)
             (cases type
                    ty2
-                   (class-type (name2)
-                               (statically-is-subclass? name1 name2))
+                   (class-type (name2) (statically-is-subclass? name1 name2))
                    (else #f)))
-           (proc-type
-            (args1 res1)
-            (cases type
-                   ty2
-                   (proc-type (args2 res2)
-                              (and (every2? is-subtype? args2 args1)
-                                   (is-subtype? res1 res2)))
-                   (else #f)))
+           (proc-type (args1 res1)
+                      (cases type
+                             ty2
+                             (proc-type (args2 res2)
+                                        (and (every2? is-subtype? args2 args1)
+                                             (is-subtype? res1 res2)))
+                             (else #f)))
            (else (equal? ty1 ty2)))))
 
 (define andmap
@@ -1268,8 +1186,7 @@
     (cond
       [(and (null? lst1) (null? lst2)) #t]
       [(or (null? lst1) (null? lst2)) #f] ; or maybe throw error
-      [(pred (car lst1) (car lst2))
-       (andmap pred (cdr lst1) (cdr lst2))]
+      [(pred (car lst1) (car lst2)) (andmap pred (cdr lst1) (cdr lst2))]
       [else #f])))
 
 (define every2? andmap)
@@ -1279,8 +1196,7 @@
   (lambda (name1 name2)
     (or
      (eqv? name1 name2)
-     (let ([super-name (static-class->super-name
-                        (lookup-static-class name1))])
+     (let ([super-name (static-class->super-name (lookup-static-class name1))])
        (if super-name (statically-is-subclass? super-name name2) #f))
      (let ([interface-names (static-class->interface-names
                              (lookup-static-class name1))])
@@ -1348,10 +1264,8 @@
       (vars exps body)
       (when (instrument-let)
         (eopl:printf "entering let ~s~%" vars))
-      (let ([new-env (extend-env
-                      vars
-                      (map newref (values-of-exps exps env))
-                      env)])
+      (let ([new-env
+             (extend-env vars (map newref (values-of-exps exps env)) env)])
         (when (instrument-let)
           (begin
             (eopl:printf "entering body of let ~s with env =~%" vars)
@@ -1360,24 +1274,20 @@
             (eopl:pretty-print (store->readable (get-store-as-list)))
             (eopl:printf "~%")))
         (value-of body new-env)))
-     (proc-exp (bvars types body)
-               (proc-val (procedure bvars body env)))
+     (proc-exp (bvars types body) (proc-val (procedure bvars body env)))
      (call-exp (rator rands)
                (let ([proc (expval->proc (value-of rator env))]
                      [args (values-of-exps rands env)])
                  (apply-procedure proc args)))
      (letrec-exp
       (result-types p-names b-varss b-vartypess p-bodies letrec-body)
-      (value-of letrec-body
-                (extend-env-rec** p-names b-varss p-bodies env)))
+      (value-of letrec-body (extend-env-rec** p-names b-varss p-bodies env)))
      (begin-exp
       (exp1 exps)
       (letrec ([value-of-begins
                 (lambda (e1 es)
                   (let ([v1 (value-of e1 env)])
-                    (if (null? es)
-                        v1
-                        (value-of-begins (car es) (cdr es)))))])
+                    (if (null? es) v1 (value-of-begins (car es) (cdr es)))))])
         (value-of-begins exp1 exps)))
      (assign-exp (x e)
                  (begin
@@ -1389,78 +1299,71 @@
      (car-exp (exp1)
               (let ([lst (expval->list (value-of exp1 env))])
                 (if (null? lst) (eopl:error 'value-of) (car lst))))
-     (cdr-exp
-      (exp1)
-      (let ([lst (expval->list (value-of exp1 env))])
-        (if (null? lst) (eopl:error 'value-of) (list-val (cdr lst)))))
+     (cdr-exp (exp1)
+              (let ([lst (expval->list (value-of exp1 env))])
+                (if (null? lst) (eopl:error 'value-of) (list-val (cdr lst)))))
      (cons-exp (exp1 exp2)
                (let ([val (value-of exp1 env)]
                      [lst (expval->list (value-of exp2 env))])
                  (list-val (cons val lst))))
      ;; args need to be non-empty for type checker
      (list-exp (exp exps)
-               (list-val (cons (value-of exp env)
-                               (values-of-exps exps env))))
+               (list-val (cons (value-of exp env) (values-of-exps exps env))))
      (new-object-exp
       (class-name rands)
-      (let ([args (values-of-exps rands env)]
-            [obj (new-object class-name)])
+      (let ([args (values-of-exps rands env)] [obj (new-object class-name)])
         (apply-method (find-method class-name 'initialize) obj args)
         obj))
      (self-exp () (apply-env env '%self))
      (method-call-exp
       (obj-exp method-name rands)
-      (let ([args (values-of-exps rands env)]
-            [obj (value-of obj-exp env)])
-        (apply-method
-         (find-method (object->class-name obj) method-name)
-         obj
-         args)))
+      (let ([args (values-of-exps rands env)] [obj (value-of obj-exp env)])
+        (apply-method (find-method (object->class-name obj) method-name)
+                      obj
+                      args)))
      (super-call-exp
       (method-name rands)
-      (let ([args (values-of-exps rands env)]
-            [obj (apply-env env '%self)])
-        (apply-method
-         (find-method (apply-env env '%super) method-name)
-         obj
-         args)))
+      (let ([args (values-of-exps rands env)] [obj (apply-env env '%self)])
+        (apply-method (find-method (apply-env env '%super) method-name)
+                      obj
+                      args)))
      ;; new cases for typed-oo
-     (cast-exp (exp c-name) ; can c-name be an interface name?
-               (let ([obj (value-of exp env)])
-                 (if (is-subclass? (object->class-name obj) c-name)
-                     obj
-                     (report-cast-error c-name obj))))
+     (cast-exp (exp c-name)
+               (if (assq c-name the-class-env)
+                   (let ([obj (value-of exp env)])
+                     (if (is-subclass? (object->class-name obj) c-name)
+                         obj
+                         (report-cast-error c-name obj)))
+                   (eopl:error 'value-of "class does not exist, ~s" c-name)))
      (instanceof-exp
       (exp c-name)
-      (let ([obj (value-of exp env)])
-        (if (is-subclass? (object->class-name obj) c-name)
-            (bool-val #t)
-            (bool-val #f)))))))
+      (if (assq c-name the-class-env)
+          (let ([obj (value-of exp env)])
+            (if (is-subclass? (object->class-name obj) c-name)
+                (bool-val #t)
+                (bool-val #f)))
+          (eopl:error 'value-of "class does not exist, ~s" c-name))))))
 
 (define report-cast-error
   (lambda (c-name obj)
-    (eopl:error 'value-of
-                "Can't cast object to type ~s:~%~s"
-                c-name
-                obj)))
+    (eopl:error 'value-of "Can't cast object to type ~s:~%~s" c-name obj)))
 
 ;; apply-procedure : Proc * Listof(ExpVal) -> ExpVal
 (define apply-procedure
   (lambda (proc1 args)
-    (cases
-     proc
-     proc1
-     (procedure
-      (vars body saved-env)
-      (let ([new-env (extend-env vars (map newref args) saved-env)])
-        (when (instrument-let)
-          (begin
-            (eopl:printf "entering body of proc ~s with env =~%" vars)
-            (eopl:pretty-print (env->list new-env))
-            (eopl:printf "store =~%")
-            (eopl:pretty-print (store->readable (get-store-as-list)))
-            (eopl:printf "~%")))
-        (value-of body new-env))))))
+    (cases proc
+           proc1
+           (procedure
+            (vars body saved-env)
+            (let ([new-env (extend-env vars (map newref args) saved-env)])
+              (when (instrument-let)
+                (begin
+                  (eopl:printf "entering body of proc ~s with env =~%" vars)
+                  (eopl:pretty-print (env->list new-env))
+                  (eopl:printf "store =~%")
+                  (eopl:pretty-print (store->readable (get-store-as-list)))
+                  (eopl:printf "~%")))
+              (value-of body new-env))))))
 
 ;; apply-method : Method * Obj * Listof(ExpVal) -> ExpVal
 (define apply-method
@@ -1469,15 +1372,14 @@
            m
            (a-method (vars body super-name field-names)
                      (value-of body
-                               (extend-env
-                                vars
-                                (map newref args)
-                                (extend-env-with-self-and-super
-                                 self
-                                 super-name
-                                 (extend-env field-names
-                                             (object->fields self)
-                                             (empty-env)))))))))
+                               (extend-env vars
+                                           (map newref args)
+                                           (extend-env-with-self-and-super
+                                            self
+                                            super-name
+                                            (extend-env field-names
+                                                        (object->fields self)
+                                                        (empty-env)))))))))
 ;; exercise: add instrumentation to apply-method, like that for
 ;; apply-procedure.
 
@@ -1496,8 +1398,7 @@
 ;; store->readable : Listof(List(Ref,Expval))
 ;;                    -> Listof(List(Ref,Something-Readable))
 (define store->readable
-  (lambda (l)
-    (map (lambda (p) (cons (car p) (expval->printable (cadr p)))) l)))
+  (lambda (l) (map (lambda (p) (cons (car p) (expval->printable (cadr p)))) l)))
 
 (define :e (lambda (str) (value-of-program (scan&parse str))))
 (define :t (lambda (str) (type-of-program (scan&parse str))))
@@ -1585,10 +1486,9 @@ in begin
            send o2 getstate())
    end
   ")
-(check-equal?
- (:e str2)
- (list-val (list (list-val (list (num-val 1) (num-val 3)))
-                 (list-val (list (num-val 2) (num-val 3))))))
+(check-equal? (:e str2)
+              (list-val (list (list-val (list (num-val 1) (num-val 3)))
+                              (list-val (list (num-val 2) (num-val 3))))))
 (check-equal? (:t str2) (list-type (list-type (int-type))))
 
 (define str3
@@ -1804,8 +1704,7 @@ in send o1 equal(o1)
    in let l2 = cdr(cdr(cdr(l1)))
    in list(null?(l1), null?(l2))
   ")
-(check-equal? (:e str12)
-              (list-val (list (bool-val #f) (bool-val #t))))
+(check-equal? (:e str12) (list-val (list (bool-val #f) (bool-val #t))))
 (check-equal? (:t str12) (list-type (bool-type)))
 
 (define str13
@@ -1827,7 +1726,7 @@ in send o1 equal(o1)
    let o1 = new c1()
    in cast o1 iface
   ")
-(check-equal? (:t str14) (class-type 'iface))
+; (:t str14) ; should fail
 ; (:e str14) ;fail
 
 (define str15
@@ -1903,3 +1802,73 @@ in send o1 equal(o1)
   ")
 (check-equal? (:t str17) (list-type (int-type)))
 (check-equal? (:e str17) (list-val (list (num-val 12) (num-val 100))))
+
+(define str18
+  "
+  interface iface
+    method int m()
+
+  class c1 extends object implements iface
+    method int initialize() 0
+    method int m() 0
+
+  class c2 extends c1
+
+  let o1 = new c2()
+  in instanceof o1 iface
+  ")
+; (:t str18) ;should fail
+; (:e str18) ;should fail
+
+(define str19
+  "
+  interface iface
+    method int m()
+
+  class c1 extends object implements iface
+    method int initialize() 0
+    method int m() 0
+
+  class c2 extends c1
+
+  let o1 = new c2()
+  in cast o1 iface
+  ")
+; (:t str19) ;should fail
+; (:e str19) ;should fail
+
+; The expression cast e c cannot succeed unless the type of e is
+; either a descendant or an ancestor of c. (Why?)
+; It is obvious that the type of e could be a descendant of c.
+; In the case of type of e being an ancestor of c, consider:
+; let obj = new son() in cast cast obj father son
+
+(define str20
+  "class c1 extends object
+     method int initialize() -1
+
+   class c2 extends c1
+
+   %class c3 extends object
+   %  method int initialize() -1
+
+   let obj = new c2()
+   in cast cast obj c1 c2")
+(check-equal? (:t str20) (class-type 'c2))
+(check-equal? (:e str20) (an-object 'c2 '()))
+
+(define str21
+  "class c1 extends object
+     method int initialize() -1
+
+   class c2 extends c1
+
+   class c3 extends object
+     method int initialize() -1
+
+   let obj = new c3()
+   in cast obj c1")
+
+; (:t str21) ; should fail
+; (:e str21) ; should fail
+
